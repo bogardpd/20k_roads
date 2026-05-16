@@ -33,5 +33,5 @@ osmium tags-filter region-latest.osm.pbf \
   w/highway=trunk_link \
   w/highway=primary_link \
   w/highway=secondary_link \
-  -o region-roads-driveable.osm.pbf
+  -o region-roads-drivable.osm.pbf
 ```
