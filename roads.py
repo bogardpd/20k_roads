@@ -2,22 +2,41 @@ import argparse
 import geopandas as gpd
 import osmium
 from pathlib import Path
+from shapely import Point
 
 OSM_CRS = 'EPSG:4326'
 METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
+MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
 
 def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
     """Matches tracks to unique OSM roads."""
 
     print("Loading OSM roads...", end=" ")
     roads = build_roads(osm_data, state_data)
+    roads_sindex = roads.sindex # Build spatial index
     print("done.")
-    print(roads)
-    
+
     print("Loading tracks...", end=" ")
     tracks = build_tracks(track_file)
     print("done.")
-    
+
+    # Temporarily filter to a small subset of tracks.
+    tracks = tracks[tracks['utc_start'] < "2010-01-16"]
+    print(tracks)
+
+    unique_roads = {}
+    for idx, track in tracks.iterrows():
+        print(f"Processing track {track.utc_start}")
+        for segment in track.geometry.geoms:
+            points_gdf = gpd.GeoDataFrame(
+                geometry=gpd.points_from_xy(*zip(*segment.coords)),
+                crs=METRIC_CRS,
+            )
+            points_gdf['closest_way_id'] = points_gdf.geometry.apply(
+                lambda r: get_closest_way(roads, roads_sindex, (r.x, r.y))
+            ).astype("Int64")
+            print(points_gdf)
+
 
 def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
     """Creates a road GeoDataFrame with state labels."""
@@ -49,6 +68,17 @@ def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
     )
     tracks = tracks.sort_values('utc_start')
     return tracks.to_crs(METRIC_CRS)
+
+def get_closest_way(
+    roads: gpd.GeoDataFrame,
+    sindex: gpd.sindex.SpatialIndex,
+    coords,
+) -> int:
+    """Looks up the closest OSM way to a given coordinate."""
+    closest_idx = list(sindex.nearest(Point(coords), max_distance=MAX_DIST))[1]
+    if len(closest_idx) == 0:
+        return None
+    return closest_idx[0]
 
 
 if __name__ == "__main__":
