@@ -3,6 +3,7 @@ import geopandas as gpd
 import osmium
 from pathlib import Path
 
+OSM_CRS = 'EPSG:4326'
 METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
 
 def find_roads(osm_data, state_data, track_file):
@@ -11,7 +12,7 @@ def find_roads(osm_data, state_data, track_file):
     states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
         'STUSPS': 'state_abbr',
         'NAME': 'state_name',
-    })
+    }).to_crs(OSM_CRS)
 
     print("Loading OSM roads...")
     fp = (
@@ -23,7 +24,7 @@ def find_roads(osm_data, state_data, track_file):
             'highway', 'name', 'ref', 'network', 'state'
         ]))
     )
-    roads = gpd.GeoDataFrame.from_features(fp, crs='EPSG:4326')
+    roads = gpd.GeoDataFrame.from_features(fp, crs=OSM_CRS)
     # Spatially join onto state boundaries.
     roads = gpd.sjoin(roads, states, how='left', predicate='within')
     print(roads)
