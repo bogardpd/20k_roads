@@ -1,13 +1,15 @@
 import argparse
 import geopandas as gpd
+import pandas as pd
 import osmium
+import re
 from pathlib import Path
 from shapely import Point
 
 OSM_CRS = 'EPSG:4326'
 METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
 MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
-CONSEC_PTS = 5 # Min number of consecutive points to count as road match
+CONSEC_PTS = 3 # Min number of consecutive points to count as road match
 
 def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
     """Matches tracks to unique OSM roads."""
@@ -23,11 +25,10 @@ def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
 
     # Temporarily filter to a small subset of tracks.
     tracks = tracks[tracks['utc_start'] < "2010-01-16"]
-    print(tracks)
 
     unique_roads = {}
-    for idx, track in tracks.iterrows():
-        print(f"Processing track {track.utc_start}")
+    for track_fid, track in tracks.iterrows():
+        print(f"Processing track {track_fid} ({track.utc_start})")
         for segment in track.geometry.geoms:
             points_gdf = gpd.GeoDataFrame(
                 geometry=gpd.points_from_xy(*zip(*segment.coords)),
@@ -59,9 +60,16 @@ def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
                 .drop_duplicates(subset='closest_way_id', keep='first')
             )
             streaks = streaks[streaks['streak_length'] >= CONSEC_PTS]
-            print(points_gdf)
-            print(streaks)
+            streaks = streaks.join(roads['unique_name'], on='closest_way_id')
+            streaks = streaks.dropna(subset='unique_name')
+            for way_idx, way in streaks.iterrows():
+                for way_name in way.unique_name.split(";"):
+                    if not way_name in unique_roads:
+                        unique_roads[way_name] = track_fid
 
+    print("\nROADS WENT DOWN:")
+    for i, (k, v) in enumerate(unique_roads.items()):
+        print(f"{i+1}: {k}")
 
 
 def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
@@ -83,6 +91,7 @@ def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
     roads = gpd.GeoDataFrame.from_features(fp, crs=OSM_CRS)
     # Spatially join U.S. states onto roads.
     roads = gpd.sjoin(roads, states, how='left', predicate='within')
+    roads['unique_name'] = roads.apply(unique_road_name, axis=1)
     return roads.to_crs(METRIC_CRS)
 
 def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
@@ -106,6 +115,15 @@ def get_closest_way(
     if len(closest_idx) == 0:
         return None
     return closest_idx[0]
+
+def unique_road_name(row: pd.Series) -> str:
+    """Formats a road name for an OSM way."""
+    if pd.isna(row.ref):
+        return row['name']
+    if re.match(r'SR ', row['ref']):
+        # Prepend state abbrevation to state route.
+        return f"{row['state_abbr']} {row['ref']}"
+    return row['ref']
 
 
 if __name__ == "__main__":
