@@ -15,8 +15,20 @@ python roads.py --osm region.osm.pbf --tracks tracks.gpkg
 
 ## Notes
 
-OpenStreetMap PBF extracts can be downloaded from [Geofabrik downloads](https://download.geofabrik.de/). Once they're downloaded, use [Osmium Tool](https://osmcode.org/osmium-tool/) to filter them to only roads with the following command:
+OpenStreetMap PBF extracts can be downloaded from [Geofabrik downloads](https://download.geofabrik.de/). Once they're downloaded, use [Osmium Tool](https://osmcode.org/osmium-tool/) to filter them to only drivable roads with the following command:
 
 ```
-osmium tags-filter region-latest.osm.pbf w/highway -o region-roads.osm.pbf
+osmium tags-filter region-latest.osm.pbf \
+  w/highway=motorway \
+  w/highway=trunk \
+  w/highway=primary \
+  w/highway=secondary \
+  w/highway=tertiary \
+  w/highway=unclassified \
+  w/highway=residential \
+  w/highway=motorway_link \
+  w/highway=trunk_link \
+  w/highway=primary_link \
+  w/highway=secondary_link \
+  -o region-roads-driveable.osm.pbf
 ```
