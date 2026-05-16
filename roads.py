@@ -3,6 +3,7 @@ import geopandas as gpd
 import pandas as pd
 import osmium
 import re
+import tomllib
 from pathlib import Path
 from shapely import Point
 
@@ -10,12 +11,14 @@ OSM_CRS = 'EPSG:4326'
 METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
 MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
 CONSEC_PTS = 3 # Min number of consecutive points to count as road match
+with open('config.toml', 'rb') as f:
+    CONFIG = tomllib.load(f)
 
 def find_roads(
     osm_data: Path,
     state_data: Path,
     track_file: Path,
-    output: Path | None = None,
+    output_dir: Path,
 ) -> None:
     """Matches tracks to unique OSM roads."""
 
@@ -76,15 +79,15 @@ def find_roads(
     for i, (k, v) in enumerate(unique_roads.items()):
         print(f"{i+1}: {k}")
 
-    if output:
-        records_df = pd.DataFrame([
-            {'road': k, 'track_fid': v}
-            for k, v in unique_roads.items()
-        ])
-        records_df = records_df.join(tracks['utc_start'], on='track_fid')
-        records_df = records_df[['utc_start','track_fid','road']]
-        records_df.to_csv(output, index=False)
-        print(f"Saved data to {output}.")
+    records_df = pd.DataFrame([
+        {'road': k, 'track_fid': v}
+        for k, v in unique_roads.items()
+    ])
+    records_df = records_df.join(tracks['utc_start'], on='track_fid')
+    records_df = records_df[['utc_start','track_fid','road']]
+    csv_path = output_dir / CONFIG['output']['csv']
+    records_df.to_csv(csv_path, index=False)
+    print(f"Saved data to {csv_path}.")
 
 
 def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
@@ -161,9 +164,10 @@ if __name__ == "__main__":
         required=True,
         help="GeoPackage file containing driving tracks",
     )
-    parser.add_argument('--output',
+    parser.add_argument('--output-dir',
         type=Path,
-        help="GeoPackage file containing driving tracks",
+        required=True,
+        help="Directory to store output data",
     )
     args = parser.parse_args()
-    find_roads(args.osm, args.states, args.tracks, output=args.output)
+    find_roads(args.osm, args.states, args.tracks, args.output_dir)
