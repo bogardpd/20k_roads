@@ -11,7 +11,7 @@ python roads.py --osm region.osm.pbf --tracks tracks.gpkg
 ### Arguments
 
 - **`--osm`:** An OpenStreetMap PBF file containing roads for the region(s) that all of the driving tracks are in.
-- **`--tracks`:** A GeoPackage file that contains a `driving_tracks` MultiLineString layer.
+- **`--tracks`:** A GeoPackage file that contains a `driving_tracks` MultiLineString layer with a `utc_start` datetime column.
 
 ## Notes
 
