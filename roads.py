@@ -11,7 +11,12 @@ METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
 MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
 CONSEC_PTS = 3 # Min number of consecutive points to count as road match
 
-def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
+def find_roads(
+    osm_data: Path,
+    state_data: Path,
+    track_file: Path,
+    output: Path | None = None,
+) -> None:
     """Matches tracks to unique OSM roads."""
 
     print("Loading OSM roads...", end=" ")
@@ -70,6 +75,16 @@ def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
     print("\nROADS WENT DOWN:")
     for i, (k, v) in enumerate(unique_roads.items()):
         print(f"{i+1}: {k}")
+
+    if output:
+        records_df = pd.DataFrame([
+            {'road': k, 'track_fid': v}
+            for k, v in unique_roads.items()
+        ])
+        records_df = records_df.join(tracks['utc_start'], on='track_fid')
+        records_df = records_df[['utc_start','track_fid','road']]
+        records_df.to_csv(output, index=False)
+        print(f"Saved data to {output}.")
 
 
 def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
@@ -131,20 +146,24 @@ if __name__ == "__main__":
         prog="find_roads",
         description="Matches GPS tracks to roads",
     )
-    parser.add_argument("--osm",
+    parser.add_argument('--osm',
         type=Path,
         required=True,
         help="OpenStreetMap PBF file covering the region of the tracks",
     )
-    parser.add_argument("--states",
+    parser.add_argument('--states',
         type=Path,
         required=True,
         help="Census TIGER data for U.S. state boundaries",
     )
-    parser.add_argument("--tracks",
+    parser.add_argument('--tracks',
         type=Path,
         required=True,
         help="GeoPackage file containing driving tracks",
     )
+    parser.add_argument('--output',
+        type=Path,
+        help="GeoPackage file containing driving tracks",
+    )
     args = parser.parse_args()
-    find_roads(args.osm, args.states, args.tracks)
+    find_roads(args.osm, args.states, args.tracks, output=args.output)
