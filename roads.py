@@ -7,6 +7,7 @@ from shapely import Point
 OSM_CRS = 'EPSG:4326'
 METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
 MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
+CONSEC_PTS = 5 # Min number of consecutive points to count as road match
 
 def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
     """Matches tracks to unique OSM roads."""
@@ -32,10 +33,35 @@ def find_roads(osm_data: Path, state_data: Path, track_file: Path) -> None:
                 geometry=gpd.points_from_xy(*zip(*segment.coords)),
                 crs=METRIC_CRS,
             )
+            # Get the closest way for every point.
             points_gdf['closest_way_id'] = points_gdf.geometry.apply(
                 lambda r: get_closest_way(roads, roads_sindex, (r.x, r.y))
             ).astype("Int64")
+            points_gdf = points_gdf.dropna(subset=['closest_way_id'])
+
+            # Find streaks of consecutive points having same closest
+            # OSM way.
+            points_gdf['streak_id'] = (
+                points_gdf['closest_way_id'] \
+                != points_gdf['closest_way_id'].shift()
+            ).cumsum().fillna(0)
+            points_gdf['streak_length'] = (points_gdf
+                .groupby('streak_id')['closest_way_id']
+                .transform("count")
+            )
+            streaks = (
+                points_gdf.groupby(
+                    ['closest_way_id', 'streak_id'],
+                    sort=False,
+                )['streak_length']
+                .first()
+                .reset_index()
+                .drop_duplicates(subset='closest_way_id', keep='first')
+            )
+            streaks = streaks[streaks['streak_length'] >= CONSEC_PTS]
             print(points_gdf)
+            print(streaks)
+
 
 
 def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
@@ -60,6 +86,7 @@ def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
     return roads.to_crs(METRIC_CRS)
 
 def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
+    """Creates a track GeoDataFrame."""
     tracks = gpd.read_file(
         track_file,
         layer='driving_tracks',
