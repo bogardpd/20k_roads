@@ -8,7 +8,7 @@ METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
 def find_roads(osm_data, state_data, track_file):
     print("Loading states...")
     states = gpd.read_file(state_data)
-    states = states[['STUSPS', 'NAME', 'geometry']]rename(columns={
+    states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
         'STUSPS': 'state_abbr',
         'NAME': 'state_name',
     })
