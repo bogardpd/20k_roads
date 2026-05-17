@@ -6,7 +6,7 @@ import re
 import tomllib
 from collections import defaultdict
 from pathlib import Path
-from shapely import Point
+from shapely.geometry import Point, LineString
 from shapely.wkb import loads as wkb_loads
 
 with open('config.toml', 'rb') as f:
@@ -67,41 +67,10 @@ def find_roads(
     for track_fid, track in tracks.iterrows():
         print(f"Processing track {track_fid} ({track.utc_start})")
         for segment in track.geometry.geoms:
-            points_gdf = gpd.GeoDataFrame(
-                geometry=gpd.points_from_xy(*zip(*segment.coords)),
-                crs=CONFIG['crs']['metric'],
-            )
-            # Get the closest way for every point.
-            points_gdf['closest_way_id'] = points_gdf.geometry.apply(
-                lambda r: get_closest_way(roads, roads_sindex, (r.x, r.y))
-            ).astype("Int64")
-            points_gdf = points_gdf.dropna(subset=['closest_way_id'])
-
-            # Find streaks of consecutive points having same closest
-            # OSM way.
-            points_gdf['streak_id'] = (
-                points_gdf['closest_way_id'] \
-                != points_gdf['closest_way_id'].shift()
-            ).cumsum().fillna(0)
-            points_gdf['streak_length'] = (points_gdf
-                .groupby('streak_id')['closest_way_id']
-                .transform("count")
-            )
-            streaks = (
-                points_gdf.groupby(
-                    ['closest_way_id', 'streak_id'],
-                    sort=False,
-                )['streak_length']
-                .first()
-                .reset_index()
-                .drop_duplicates(subset='closest_way_id', keep='first')
-            )
-            streaks = streaks[
-                streaks['streak_length'] >= CONFIG['search']['consec_pts']
-            ]
-            streaks = streaks.join(roads['unique_name'], on='closest_way_id')
-            streaks = streaks.dropna(subset='unique_name')
-            for way_idx, way in streaks.iterrows():
+            ways = get_segment_ways(roads, roads_sindex, segment)
+            ways = ways.join(roads['unique_name'], on='closest_way_id')
+            ways = ways.dropna(subset='unique_name')
+            for way_idx, way in ways.iterrows():
                 for way_name in way.unique_name.split(";"):
                     if not way_name in unique_roads:
                         unique_roads[way_name] = track_fid
@@ -172,6 +141,46 @@ def get_closest_way(
     if len(closest_idx) == 0:
         return None
     return roads.index[closest_idx[0]]
+
+def get_segment_ways(
+    roads: gpd.GeoDataFrame,
+    roads_sindex: gpd.sindex.SpatialIndex,
+    segment: LineString,
+) -> list[int]:
+    """Gets a list of way IDs the segment traverses."""
+    points_gdf = gpd.GeoDataFrame(
+        geometry=gpd.points_from_xy(*zip(*segment.coords)),
+        crs=CONFIG['crs']['metric'],
+    )
+    # Get the closest way for every point.
+    points_gdf['closest_way_id'] = points_gdf.geometry.apply(
+        lambda r: get_closest_way(roads, roads_sindex, (r.x, r.y))
+    ).astype("Int64")
+    points_gdf = points_gdf.dropna(subset=['closest_way_id'])
+
+    # Find streaks of consecutive points having same closest
+    # OSM way.
+    points_gdf['streak_id'] = (
+        points_gdf['closest_way_id'] \
+        != points_gdf['closest_way_id'].shift()
+    ).cumsum().fillna(0)
+    points_gdf['streak_length'] = (points_gdf
+        .groupby('streak_id')['closest_way_id']
+        .transform("count")
+    )
+    streaks = (
+        points_gdf.groupby(
+            ['closest_way_id', 'streak_id'],
+            sort=False,
+        )['streak_length']
+        .first()
+        .reset_index()
+        .drop_duplicates(subset='closest_way_id', keep='first')
+    )
+    way_ids = streaks[
+        streaks['streak_length'] >= CONFIG['search']['consec_pts']
+    ]
+    return way_ids
 
 def unique_road_name(row: pd.Series) -> str:
     """Formats a road name for an OSM way."""
