@@ -5,7 +5,7 @@ A tool to compare GPS driving tracks to OSM roads.
 ## Usage
 
 ```
-python roads.py --osm region.osm.pbf --states tl_2023_us_state.zip --tracks tracks.gpkg
+python roads.py --osm region.osm.pbf --states tl_2023_us_state.zip --tracks tracks.gpkg --output-dir /path-to-dir
 ```
 
 ### Arguments
@@ -13,6 +13,7 @@ python roads.py --osm region.osm.pbf --states tl_2023_us_state.zip --tracks trac
 - **`--osm`:** An OpenStreetMap PBF file containing roads for the region(s) that all of the driving tracks are in.
 - **`--states`:** Census TIGER data for U.S. state outlines, used to disambiguate state routes with the same number in different states.
 - **`--tracks`:** A GeoPackage file that contains a `driving_tracks` MultiLineString layer with a `utc_start` datetime column.
+- **`--output-dir`:** A directory to store the outputs from this script.
 
 ## Data Sources
 
