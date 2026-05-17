@@ -6,6 +6,7 @@ import re
 import tomllib
 from pathlib import Path
 from shapely import Point
+from shapely.wkb import loads as wkb_loads
 
 OSM_CRS = 'EPSG:4326'
 METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
@@ -13,6 +14,32 @@ MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
 CONSEC_PTS = 3 # Min number of consecutive points to count as road match
 with open('config.toml', 'rb') as f:
     CONFIG = tomllib.load(f)
+
+class RoadHandler(osmium.SimpleHandler):
+    """Processes OSM roads."""
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self._factory = osmium.geom.WKBFactory()
+
+    def way(self, w):
+        if 'highway' not in w.tags:
+            return
+        try:
+            geom = wkb_loads(self._factory.create_linestring(w), hex=True)
+        except osmium.InvalidLocationError:
+            return
+        self.rows.append({
+            'geometry': geom,
+            'id': w.id,
+            'highway': w.tags.get('highway'),
+            'name': w.tags.get('name'),
+            'ref': w.tags.get('ref'),
+            'network': w.tags.get('network'),
+            'state': w.tags.get('state'),
+            'first_node': w.nodes[0].ref,
+            'last_node': w.nodes[-1].ref,
+        })
 
 def find_roads(
     osm_data: Path,
@@ -74,7 +101,7 @@ def find_roads(
                 for way_name in way.unique_name.split(";"):
                     if not way_name in unique_roads:
                         unique_roads[way_name] = track_fid
-
+    
     print("\nROADS WENT DOWN:")
     for i, (k, v) in enumerate(unique_roads.items()):
         print(f"{i+1}: {k}")
@@ -92,21 +119,19 @@ def find_roads(
 
 def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
     """Creates a road GeoDataFrame with state labels."""
+
+    # Load U.S. states.
     states = gpd.read_file(state_data)
     states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
         'STUSPS': 'state_abbr',
         'NAME': 'state_name',
     }).to_crs(OSM_CRS)
-    fp = (
-        osmium.FileProcessor(osm_data)
-        .with_locations()
-        .with_filter(osmium.filter.EntityFilter(osmium.osm.WAY))
-        .with_filter(osmium.filter.KeyFilter('highway'))
-        .with_filter(osmium.filter.GeoInterfaceFilter(tags=[
-            'highway', 'name', 'ref', 'network', 'state'
-        ]))
-    )
-    roads = gpd.GeoDataFrame.from_features(fp, crs=OSM_CRS)
+
+    # Process OSM roads.
+    handler = RoadHandler()
+    handler.apply_file(osm_data, locations=True)
+    roads = gpd.GeoDataFrame(handler.rows, crs=OSM_CRS).set_index('id')
+
     # Spatially join U.S. states onto roads.
     roads = gpd.sjoin(roads, states, how='left', predicate='within')
     roads['unique_name'] = roads.apply(unique_road_name, axis=1)
@@ -126,13 +151,13 @@ def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
 def get_closest_way(
     roads: gpd.GeoDataFrame,
     sindex: gpd.sindex.SpatialIndex,
-    coords,
+    coords: tuple,
 ) -> int:
     """Looks up the closest OSM way to a given coordinate."""
     closest_idx = list(sindex.nearest(Point(coords), max_distance=MAX_DIST))[1]
     if len(closest_idx) == 0:
         return None
-    return closest_idx[0]
+    return roads.index[closest_idx[0]]
 
 def unique_road_name(row: pd.Series) -> str:
     """Formats a road name for an OSM way."""
