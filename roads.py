@@ -21,6 +21,7 @@ class RoadHandler(osmium.SimpleHandler):
         self._factory = osmium.geom.WKBFactory()
 
     def way(self, w):
+        """Processing for each way in OSM data."""
         if 'highway' not in w.tags:
             return
         try:
@@ -51,9 +52,9 @@ def find_roads(
 
     print("Loading OSM data...", end=" ")
     processed_osm = build_osm(osm_data, state_data)
-    roads = processed_osm['roads']
-    node_ways = processed_osm['nodes']
-    roads_sindex = roads.sindex # Build spatial index
+    ways = processed_osm['ways']
+    nodes = processed_osm['nodes']
+    roads_sindex = ways.sindex # Build spatial index
     print("done.")
 
     print("Loading tracks...", end=" ")
@@ -67,10 +68,10 @@ def find_roads(
     for track_fid, track in tracks.iterrows():
         print(f"Processing track {track_fid} ({track.utc_start})")
         for segment in track.geometry.geoms:
-            ways = get_segment_ways(roads, roads_sindex, segment)
-            ways = ways.join(roads['unique_name'], on='closest_way_id')
-            ways = ways.dropna(subset='unique_name')
-            for way_idx, way in ways.iterrows():
+            segment_ways = get_segment_ways(ways, roads_sindex, segment)
+            segment_ways = segment_ways.join(ways['unique_name'], on='closest_way_id')
+            segment_ways = segment_ways.dropna(subset='unique_name')
+            for way_idx, way in segment_ways.iterrows():
                 for way_name in way.unique_name.split(";"):
                     if not way_name in unique_roads:
                         unique_roads[way_name] = track_fid
@@ -100,20 +101,20 @@ def build_osm(osm_data: Path, state_data: Path) -> dict:
         'NAME': 'state_name',
     }).to_crs(CONFIG['crs']['osm'])
 
-    # Process OSM roads.
+    # Process OSM ways.
     handler = RoadHandler()
     handler.apply_file(osm_data, locations=True)
-    roads = gpd.GeoDataFrame(
+    ways = gpd.GeoDataFrame(
         handler.rows,
         crs=CONFIG['crs']['osm'],
     ).set_index('id')
 
-    # Spatially join U.S. states onto roads.
-    roads = gpd.sjoin(roads, states, how='left', predicate='within')
-    roads['unique_name'] = roads.apply(unique_road_name, axis=1)
+    # Spatially join U.S. states onto ways.
+    ways = gpd.sjoin(ways, states, how='left', predicate='within')
+    ways['unique_name'] = ways.apply(unique_road_name, axis=1)
 
     return {
-        'roads': roads.to_crs(CONFIG['crs']['metric']),
+        'ways': ways.to_crs(CONFIG['crs']['metric']),
         'nodes': handler.node_ways
     }
 
