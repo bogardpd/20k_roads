@@ -4,6 +4,7 @@ import pandas as pd
 import osmium
 import re
 import tomllib
+from collections import defaultdict
 from pathlib import Path
 from shapely import Point
 from shapely.wkb import loads as wkb_loads
@@ -20,6 +21,7 @@ class RoadHandler(osmium.SimpleHandler):
     def __init__(self):
         super().__init__()
         self.rows = []
+        self.node_ways = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
 
     def way(self, w):
@@ -40,6 +42,8 @@ class RoadHandler(osmium.SimpleHandler):
             'first_node': w.nodes[0].ref,
             'last_node': w.nodes[-1].ref,
         })
+        for node in [w.nodes[0], w.nodes[-1]]:
+            self.node_ways[node.ref].add(w.id)
 
 def find_roads(
     osm_data: Path,
@@ -49,8 +53,10 @@ def find_roads(
 ) -> None:
     """Matches tracks to unique OSM roads."""
 
-    print("Loading OSM roads...", end=" ")
-    roads = build_roads(osm_data, state_data)
+    print("Loading OSM data...", end=" ")
+    processed_osm = build_osm(osm_data, state_data)
+    roads = processed_osm['roads']
+    node_ways = processed_osm['nodes']
     roads_sindex = roads.sindex # Build spatial index
     print("done.")
 
@@ -117,8 +123,8 @@ def find_roads(
     print(f"Saved data to {csv_path}.")
 
 
-def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
-    """Creates a road GeoDataFrame with state labels."""
+def build_osm(osm_data: Path, state_data: Path) -> dict:
+    """Creates a road GeoDataFrame and a node lookup table."""
 
     # Load U.S. states.
     states = gpd.read_file(state_data)
@@ -135,7 +141,8 @@ def build_roads(osm_data: Path, state_data: Path) -> gpd.GeoDataFrame:
     # Spatially join U.S. states onto roads.
     roads = gpd.sjoin(roads, states, how='left', predicate='within')
     roads['unique_name'] = roads.apply(unique_road_name, axis=1)
-    return roads.to_crs(METRIC_CRS)
+
+    return {'roads': roads.to_crs(METRIC_CRS), 'nodes': handler.node_ways}
 
 def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
     """Creates a track GeoDataFrame."""
