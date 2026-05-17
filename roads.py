@@ -32,10 +32,8 @@ class RoadHandler(osmium.SimpleHandler):
             'geometry': geom,
             'id': w.id,
             'highway': w.tags.get('highway'),
-            'name': w.tags.get('name'),
-            'ref': w.tags.get('ref'),
-            'network': w.tags.get('network'),
-            'state': w.tags.get('state'),
+            'road_name': w.tags.get('name'),
+            'route_ref': w.tags.get('ref'),
             'first_node': w.nodes[0].ref,
             'last_node': w.nodes[-1].ref,
         })
@@ -65,30 +63,61 @@ def find_roads(
     tracks = tracks[tracks['utc_start'] < "2010-01-16"]
 
     unique_roads = {}
+    visited_road_way_ids = set()
     for track_fid, track in tracks.iterrows():
         print(f"Processing track {track_fid} ({track.utc_start})")
         for segment in track.geometry.geoms:
-            segment_ways = get_segment_ways(ways, roads_sindex, segment)
-            segment_ways = segment_ways.join(ways['unique_name'], on='closest_way_id')
-            segment_ways = segment_ways.dropna(subset='unique_name')
-            for way_idx, way in segment_ways.iterrows():
-                for way_name in way.unique_name.split(";"):
-                    if not way_name in unique_roads:
-                        unique_roads[way_name] = track_fid
+            seg_ways = get_segment_ways(ways, roads_sindex, segment).to_frame()
+            seg_ways = seg_ways.join(
+                ways[['road_name', 'route_ref', 'unique_name']],
+                on='way_id',
+            )
+            seg_ways = seg_ways.dropna(subset='unique_name')
+            print(seg_ways)
+            for _, seg_way in seg_ways.iterrows():
+                if seg_way.way_id in visited_road_way_ids:
+                    continue
+                seg_road_ways = dict()
+                if pd.isna(seg_way.route_ref):
+                    get_road_way_ids(
+                        ways,
+                        nodes,
+                        visited_road_way_ids,
+                        seg_road_ways,
+                        seg_way.way_id,
+                        road_name=seg_way.road_name,
+                    )
+                else:
+                    for route_ref in seg_way.route_ref.split(";"):
+                        get_road_way_ids(
+                            ways,
+                            nodes,
+                            visited_road_way_ids,
+                            seg_road_ways,
+                            seg_way.way_id,
+                            route_ref=route_ref,
+                        )
+                        pass
+                print("seg_road_ways", seg_road_ways)
+                print("visited_road_way_ids", visited_road_way_ids)
+            # for way_idx, way in segment_ways.iterrows():
+            #     for way_name in way.unique_name.split(";"):
+            #         if not way_name in unique_roads:
+            #             unique_roads[way_name] = track_fid
     
     print("\nROADS WENT DOWN:")
     for i, (k, v) in enumerate(unique_roads.items()):
         print(f"{i+1}: {k}")
 
-    records_df = pd.DataFrame([
-        {'road': k, 'track_fid': v}
-        for k, v in unique_roads.items()
-    ])
-    records_df = records_df.join(tracks['utc_start'], on='track_fid')
-    records_df = records_df[['utc_start','track_fid','road']]
-    csv_path = output_dir / CONFIG['output']['csv']
-    records_df.to_csv(csv_path, index=False)
-    print(f"Saved data to {csv_path}.")
+    # records_df = pd.DataFrame([
+    #     {'road': k, 'track_fid': v}
+    #     for k, v in unique_roads.items()
+    # ])
+    # records_df = records_df.join(tracks['utc_start'], on='track_fid')
+    # records_df = records_df[['utc_start','track_fid','road']]
+    # csv_path = output_dir / CONFIG['output']['csv']
+    # records_df.to_csv(csv_path, index=False)
+    # print(f"Saved data to {csv_path}.")
 
 
 def build_osm(osm_data: Path, state_data: Path) -> dict:
@@ -143,12 +172,40 @@ def get_closest_way(
         return None
     return roads.index[closest_idx[0]]
 
+def get_road_way_ids(
+    ways: gpd.GeoDataFrame,
+    nodes: dict,
+    visited_road_way_ids: set,
+    seg_road_ways: dict,
+    way_id: int,
+    road_name: str | None = None,
+    route_ref: str | None = None,
+):
+    """Traces a road."""
+    way = ways.loc[way_id]
+    visited_road_way_ids.add(way_id)
+    seg_road_ways[way_id] = way.geometry
+    for node in [way.first_node, way.last_node]:
+        adj_way_ids = nodes[node]
+        for adj_way_id in adj_way_ids:
+            if adj_way_id in seg_road_ways:
+                continue
+            adj_way = ways.loc[adj_way_id]
+            if (
+                (route_ref is None and adj_way.road_name == road_name)
+                or (route_ref in str(adj_way.route_ref).split(";"))
+            ):
+                # TODO: Instead of adding the following, call self
+                # (they will be added on call)
+                visited_road_way_ids.add(adj_way_id)
+                seg_road_ways[adj_way_id] = adj_way.geometry
+
 def get_segment_ways(
     roads: gpd.GeoDataFrame,
     roads_sindex: gpd.sindex.SpatialIndex,
     segment: LineString,
-) -> list[int]:
-    """Gets a list of way IDs the segment traverses."""
+) -> pd.Series:
+    """Gets a Series of way IDs the segment traverses."""
     points_gdf = gpd.GeoDataFrame(
         geometry=gpd.points_from_xy(*zip(*segment.coords)),
         crs=CONFIG['crs']['metric'],
@@ -178,19 +235,18 @@ def get_segment_ways(
         .reset_index()
         .drop_duplicates(subset='closest_way_id', keep='first')
     )
-    way_ids = streaks[
+    return streaks[
         streaks['streak_length'] >= CONFIG['search']['consec_pts']
-    ]
-    return way_ids
+    ]['closest_way_id'].rename('way_id')
 
 def unique_road_name(row: pd.Series) -> str:
     """Formats a road name for an OSM way."""
-    if pd.isna(row.ref):
-        return row['name']
-    if re.match(r'SR ', row['ref']):
+    if pd.isna(row.route_ref):
+        return row.road_name
+    if re.match(r'SR ', row.route_ref):
         # Prepend state abbreviation to state route.
-        return f"{row['state_abbr']} {row['ref']}"
-    return row['ref']
+        return f"{row.state_abbr} {row.route_ref}"
+    return row.route_ref
 
 
 if __name__ == "__main__":
