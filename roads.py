@@ -9,10 +9,6 @@ from pathlib import Path
 from shapely import Point
 from shapely.wkb import loads as wkb_loads
 
-OSM_CRS = 'EPSG:4326'
-METRIC_CRS = 'EPSG:5070' # CONUS Albers Metric
-MAX_DIST = 50 # Max meters (metric CRS) to search for nearby road
-CONSEC_PTS = 3 # Min number of consecutive points to count as road match
 with open('config.toml', 'rb') as f:
     CONFIG = tomllib.load(f)
 
@@ -73,7 +69,7 @@ def find_roads(
         for segment in track.geometry.geoms:
             points_gdf = gpd.GeoDataFrame(
                 geometry=gpd.points_from_xy(*zip(*segment.coords)),
-                crs=METRIC_CRS,
+                crs=CONFIG['crs']['metric'],
             )
             # Get the closest way for every point.
             points_gdf['closest_way_id'] = points_gdf.geometry.apply(
@@ -100,7 +96,9 @@ def find_roads(
                 .reset_index()
                 .drop_duplicates(subset='closest_way_id', keep='first')
             )
-            streaks = streaks[streaks['streak_length'] >= CONSEC_PTS]
+            streaks = streaks[
+                streaks['streak_length'] >= CONFIG['search']['consec_pts']
+            ]
             streaks = streaks.join(roads['unique_name'], on='closest_way_id')
             streaks = streaks.dropna(subset='unique_name')
             for way_idx, way in streaks.iterrows():
@@ -131,18 +129,24 @@ def build_osm(osm_data: Path, state_data: Path) -> dict:
     states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
         'STUSPS': 'state_abbr',
         'NAME': 'state_name',
-    }).to_crs(OSM_CRS)
+    }).to_crs(CONFIG['crs']['osm'])
 
     # Process OSM roads.
     handler = RoadHandler()
     handler.apply_file(osm_data, locations=True)
-    roads = gpd.GeoDataFrame(handler.rows, crs=OSM_CRS).set_index('id')
+    roads = gpd.GeoDataFrame(
+        handler.rows,
+        crs=CONFIG['crs']['osm'],
+    ).set_index('id')
 
     # Spatially join U.S. states onto roads.
     roads = gpd.sjoin(roads, states, how='left', predicate='within')
     roads['unique_name'] = roads.apply(unique_road_name, axis=1)
 
-    return {'roads': roads.to_crs(METRIC_CRS), 'nodes': handler.node_ways}
+    return {
+        'roads': roads.to_crs(CONFIG['crs']['metric']),
+        'nodes': handler.node_ways
+    }
 
 def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
     """Creates a track GeoDataFrame."""
@@ -153,7 +157,7 @@ def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
         columns=['utc_start'],
     )
     tracks = tracks.sort_values('utc_start')
-    return tracks.to_crs(METRIC_CRS)
+    return tracks.to_crs(CONFIG['crs']['metric'])
 
 def get_closest_way(
     roads: gpd.GeoDataFrame,
@@ -161,7 +165,10 @@ def get_closest_way(
     coords: tuple,
 ) -> int:
     """Looks up the closest OSM way to a given coordinate."""
-    closest_idx = list(sindex.nearest(Point(coords), max_distance=MAX_DIST))[1]
+    closest_idx = list(sindex.nearest(
+        Point(coords),
+        max_distance=CONFIG['search']['max_dist'],
+    ))[1]
     if len(closest_idx) == 0:
         return None
     return roads.index[closest_idx[0]]
@@ -171,7 +178,7 @@ def unique_road_name(row: pd.Series) -> str:
     if pd.isna(row.ref):
         return row['name']
     if re.match(r'SR ', row['ref']):
-        # Prepend state abbrevation to state route.
+        # Prepend state abbreviation to state route.
         return f"{row['state_abbr']} {row['ref']}"
     return row['ref']
 

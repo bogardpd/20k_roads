@@ -1,3 +1,12 @@
+[crs]
+osm = "EPSG:4326"
+metric = "EPSG:5070" # CONUS Albers Metric
+
+[search]
+# Parameters for finding roads.
+max_dist = 50 # Max meters (in metric CRS) to search for nearby road
+consec_pts = 3 # Min number of consecutive points to count as road match
+
 [output]
 # Output filenames, relative to the --output directory
 csv = "roads.csv"
