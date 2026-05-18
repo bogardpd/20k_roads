@@ -78,8 +78,8 @@ def find_roads(
             for _, seg_way in seg_ways.iterrows():
                 if seg_way.way_id in visited_road_way_ids:
                     continue
-                seg_road_ways = dict()
                 if pd.isna(seg_way.route_ref):
+                    seg_road_ways = dict()
                     get_road_way_ids(
                         ways,
                         nodes,
@@ -88,8 +88,15 @@ def find_roads(
                         seg_way.way_id,
                         road_name=seg_way.road_name,
                     )
+                    visited_road_count += 1
+                    visited_road_records.append({
+                        'visit_order': visited_road_count,
+                        'name': seg_way.unique_name,
+                        'geometry': MultiLineString(seg_road_ways.values()),
+                    })
                 else:
                     for route_ref in seg_way.route_ref.split(";"):
+                        seg_road_ways = dict()
                         get_road_way_ids(
                             ways,
                             nodes,
@@ -98,20 +105,20 @@ def find_roads(
                             seg_way.way_id,
                             route_ref=route_ref,
                         )
-                        pass
-                visited_road_count += 1
-                visited_road_records.append({
-                    'visit_order': visited_road_count,
-                    'name': seg_way.unique_name,
-                    'geometry': MultiLineString(seg_road_ways.values()),
-                })
+                        visited_road_count += 1
+                        visited_road_records.append({
+                            'visit_order': visited_road_count,
+                            'name': route_ref,
+                            'geometry': MultiLineString(
+                                seg_road_ways.values()
+                            ),
+                        })
     
     visited_road_gdf = gpd.GeoDataFrame(
         visited_road_records,
         geometry='geometry',
         crs=CONFIG['crs']['metric']
     ).to_crs(CONFIG['crs']['output'])
-    print(visited_road_gdf)
     gpkg_path = output_dir / CONFIG['output']['gpkg']
     visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
     print(f"Exported GeoPackage to {gpkg_path}")
@@ -188,14 +195,24 @@ def get_road_way_ids(
             if adj_way_id in seg_road_ways:
                 continue
             adj_way = ways.loc[adj_way_id]
-            if (
-                (route_ref is None and adj_way.road_name == road_name)
-                or (route_ref in str(adj_way.route_ref).split(";"))
-            ):
-                # TODO: Instead of adding the following, call self
-                # (they will be added on call)
-                visited_road_way_ids.add(adj_way_id)
-                seg_road_ways[adj_way_id] = adj_way.geometry
+            if route_ref is None and adj_way.road_name == road_name:
+                get_road_way_ids(
+                    ways,
+                    nodes,
+                    visited_road_way_ids,
+                    seg_road_ways,
+                    way_id=adj_way_id,
+                    road_name=road_name,
+                )
+            elif route_ref in str(adj_way.route_ref).split(";"):
+                get_road_way_ids(
+                    ways,
+                    nodes,
+                    visited_road_way_ids,
+                    seg_road_ways,
+                    way_id=adj_way_id,
+                    route_ref=route_ref,
+                )
 
 def get_segment_ways(
     roads: gpd.GeoDataFrame,
