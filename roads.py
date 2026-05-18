@@ -6,7 +6,7 @@ import re
 import tomllib
 from collections import defaultdict
 from pathlib import Path
-from shapely.geometry import Point, LineString
+from shapely.geometry import Point, LineString, MultiLineString
 from shapely.wkb import loads as wkb_loads
 
 with open('config.toml', 'rb') as f:
@@ -64,6 +64,8 @@ def find_roads(
 
     unique_roads = {}
     visited_road_way_ids = set()
+    visited_road_records = []
+    visited_road_count = 0
     for track_fid, track in tracks.iterrows():
         print(f"Processing track {track_fid} ({track.utc_start})")
         for segment in track.geometry.geoms:
@@ -73,7 +75,6 @@ def find_roads(
                 on='way_id',
             )
             seg_ways = seg_ways.dropna(subset='unique_name')
-            print(seg_ways)
             for _, seg_way in seg_ways.iterrows():
                 if seg_way.way_id in visited_road_way_ids:
                     continue
@@ -98,26 +99,22 @@ def find_roads(
                             route_ref=route_ref,
                         )
                         pass
-                print("seg_road_ways", seg_road_ways)
-                print("visited_road_way_ids", visited_road_way_ids)
-            # for way_idx, way in segment_ways.iterrows():
-            #     for way_name in way.unique_name.split(";"):
-            #         if not way_name in unique_roads:
-            #             unique_roads[way_name] = track_fid
+                visited_road_count += 1
+                visited_road_records.append({
+                    'visit_order': visited_road_count,
+                    'name': seg_way.unique_name,
+                    'geometry': MultiLineString(seg_road_ways.values()),
+                })
     
-    print("\nROADS WENT DOWN:")
-    for i, (k, v) in enumerate(unique_roads.items()):
-        print(f"{i+1}: {k}")
-
-    # records_df = pd.DataFrame([
-    #     {'road': k, 'track_fid': v}
-    #     for k, v in unique_roads.items()
-    # ])
-    # records_df = records_df.join(tracks['utc_start'], on='track_fid')
-    # records_df = records_df[['utc_start','track_fid','road']]
-    # csv_path = output_dir / CONFIG['output']['csv']
-    # records_df.to_csv(csv_path, index=False)
-    # print(f"Saved data to {csv_path}.")
+    visited_road_gdf = gpd.GeoDataFrame(
+        visited_road_records,
+        geometry='geometry',
+        crs=CONFIG['crs']['metric']
+    ).to_crs(CONFIG['crs']['output'])
+    print(visited_road_gdf)
+    gpkg_path = output_dir / CONFIG['output']['gpkg']
+    visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
+    print(f"Exported GeoPackage to {gpkg_path}")
 
 
 def build_osm(osm_data: Path, state_data: Path) -> dict:

@@ -1,6 +1,7 @@
 [crs]
-osm = "EPSG:4326"
+osm = "EPSG:4326" # WGS-84
 metric = "EPSG:5070" # CONUS Albers Metric
+output = "EPSG:4326" # WGS-84
 
 [search]
 # Parameters for finding roads.
@@ -10,3 +11,4 @@ consec_pts = 3 # Min number of consecutive points to count as road match
 [output]
 # Output filenames, relative to the --output directory
 csv = "roads.csv"
+gpkg = "20k_roads.gpkg"
