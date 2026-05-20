@@ -14,8 +14,9 @@ with open('config.toml', 'rb') as f:
 
 class RoadHandler(osmium.SimpleHandler):
     """Processes OSM roads."""
-    def __init__(self):
+    def __init__(self, state_data):
         super().__init__()
+        self.state_data = state_data
         self.rows = []
         self.node_ways = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
@@ -40,6 +41,22 @@ class RoadHandler(osmium.SimpleHandler):
         for node in [w.nodes[0], w.nodes[-1]]:
             self.node_ways[node.ref].add(w.id)
 
+    @property
+    def ways(self):
+        states = gpd.read_file(self.state_data)
+        states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
+            'STUSPS': 'state_abbr',
+            'NAME': 'state_name',
+        }).to_crs(CONFIG['crs']['osm'])
+        ways = gpd.GeoDataFrame(
+            self.rows,
+            crs=CONFIG['crs']['osm'],
+        ).set_index('id')
+        # Spatially join U.S. states onto ways.
+        ways = gpd.sjoin(ways, states, how='left', predicate='within')
+        ways['unique_name'] = ways.apply(unique_road_name, axis=1)
+        return ways.to_crs(CONFIG['crs']['metric'])
+
 def find_roads(
     osm_data: Path,
     state_data: Path,
@@ -49,9 +66,10 @@ def find_roads(
     """Matches tracks to unique OSM roads."""
 
     print("Loading OSM data...", end=" ")
-    processed_osm = build_osm(osm_data, state_data)
-    ways = processed_osm['ways']
-    nodes = processed_osm['nodes']
+    handler = RoadHandler(state_data)
+    handler.apply_file(osm_data, locations=True)
+    ways = handler.ways
+    nodes = handler.node_ways
     roads_sindex = ways.sindex # Build spatial index
     print("done.")
 
@@ -122,34 +140,6 @@ def find_roads(
     gpkg_path = output_dir / CONFIG['output']['gpkg']
     visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
     print(f"Exported GeoPackage to {gpkg_path}")
-
-
-def build_osm(osm_data: Path, state_data: Path) -> dict:
-    """Creates a road GeoDataFrame and a node lookup table."""
-
-    # Load U.S. states.
-    states = gpd.read_file(state_data)
-    states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
-        'STUSPS': 'state_abbr',
-        'NAME': 'state_name',
-    }).to_crs(CONFIG['crs']['osm'])
-
-    # Process OSM ways.
-    handler = RoadHandler()
-    handler.apply_file(osm_data, locations=True)
-    ways = gpd.GeoDataFrame(
-        handler.rows,
-        crs=CONFIG['crs']['osm'],
-    ).set_index('id')
-
-    # Spatially join U.S. states onto ways.
-    ways = gpd.sjoin(ways, states, how='left', predicate='within')
-    ways['unique_name'] = ways.apply(unique_road_name, axis=1)
-
-    return {
-        'ways': ways.to_crs(CONFIG['crs']['metric']),
-        'nodes': handler.node_ways
-    }
 
 def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
     """Creates a track GeoDataFrame."""
