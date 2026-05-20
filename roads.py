@@ -186,33 +186,24 @@ def get_road_way_ids(
     route_ref: str | None = None,
 ):
     """Traces a road."""
-    way = ways.loc[way_id]
-    visited_road_way_ids.add(way_id)
-    seg_road_ways[way_id] = way.geometry
-    for node in [way.first_node, way.last_node]:
-        adj_way_ids = nodes[node]
-        for adj_way_id in adj_way_ids:
-            if adj_way_id in seg_road_ways:
-                continue
-            adj_way = ways.loc[adj_way_id]
-            if route_ref is None and adj_way.road_name == road_name:
-                get_road_way_ids(
-                    ways,
-                    nodes,
-                    visited_road_way_ids,
-                    seg_road_ways,
-                    way_id=adj_way_id,
-                    road_name=road_name,
-                )
-            elif route_ref in str(adj_way.route_ref).split(";"):
-                get_road_way_ids(
-                    ways,
-                    nodes,
-                    visited_road_way_ids,
-                    seg_road_ways,
-                    way_id=adj_way_id,
-                    route_ref=route_ref,
-                )
+    stack = [way_id]
+    while stack:
+        current_way_id = stack.pop()
+        if current_way_id in seg_road_ways:
+            continue
+        way = ways.loc[current_way_id]
+        visited_road_way_ids.add(current_way_id)
+        seg_road_ways[current_way_id] = way.geometry
+
+        for node in [way.first_node, way.last_node]:
+            for adj_way_id in nodes[node]:
+                if adj_way_id in seg_road_ways:
+                    continue
+                adj_way = ways.loc[adj_way_id]
+                if route_ref is None and adj_way.road_name == road_name:
+                    stack.append(adj_way_id)
+                elif route_ref in str(adj_way.route_ref).split(";"):
+                    stack.append(adj_way_id)
 
 def get_segment_ways(
     roads: gpd.GeoDataFrame,
