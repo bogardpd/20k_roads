@@ -12,6 +12,26 @@ from shapely.wkb import loads as wkb_loads
 with open('config.toml', 'rb') as f:
     CONFIG = tomllib.load(f)
 
+class OSMDataContainer():
+    """Holds OSM data."""
+    def __init__(self, osm_data, state_data):
+        self.osm_data_dir: Path | None = None
+        self.ways: gpd.GeoDataFrame | None = None
+        self.ways_sindex = None
+        self.node_ways: dict | None = None
+        self.load_osm(osm_data, state_data)
+
+    def load_osm(self, osm_data, state_data):
+        """Loads OSM data."""
+        self.osm_data_dir = osm_data.parent
+        # TODO: check for pickle before processing data.
+        handler = RoadHandler(state_data)
+        handler.apply_file(osm_data, locations=True)
+        self.ways = handler.ways
+        self.node_ways = handler.node_ways
+        self.ways_sindex = self.ways.sindex # Build spatial index
+        
+
 class RoadHandler(osmium.SimpleHandler):
     """Processes OSM roads."""
     def __init__(self, state_data):
@@ -66,11 +86,10 @@ def find_roads(
     """Matches tracks to unique OSM roads."""
 
     print("Loading OSM data...", end=" ")
-    handler = RoadHandler(state_data)
-    handler.apply_file(osm_data, locations=True)
-    ways = handler.ways
-    nodes = handler.node_ways
-    roads_sindex = ways.sindex # Build spatial index
+    osmdc = OSMDataContainer(osm_data, state_data)
+    ways = osmdc.ways
+    nodes = osmdc.node_ways
+    ways_sindex = osmdc.ways_sindex # Build spatial index
     print("done.")
 
     print("Loading tracks...", end=" ")
@@ -87,7 +106,7 @@ def find_roads(
     for track_fid, track in tracks.iterrows():
         print(f"Processing track {track_fid} ({track.utc_start})")
         for segment in track.geometry.geoms:
-            seg_ways = get_segment_ways(ways, roads_sindex, segment).to_frame()
+            seg_ways = get_segment_ways(ways, ways_sindex, segment).to_frame()
             seg_ways = seg_ways.join(
                 ways[['road_name', 'route_ref', 'unique_name']],
                 on='way_id',
@@ -197,7 +216,7 @@ def get_road_way_ids(
 
 def get_segment_ways(
     roads: gpd.GeoDataFrame,
-    roads_sindex: gpd.sindex.SpatialIndex,
+    ways_sindex: gpd.sindex.SpatialIndex,
     segment: LineString,
 ) -> pd.Series:
     """Gets a Series of way IDs the segment traverses."""
@@ -207,7 +226,7 @@ def get_segment_ways(
     )
     # Get the closest way for every point.
     points_gdf['closest_way_id'] = points_gdf.geometry.apply(
-        lambda r: get_closest_way(roads, roads_sindex, (r.x, r.y))
+        lambda r: get_closest_way(roads, ways_sindex, (r.x, r.y))
     ).astype("Int64")
     points_gdf = points_gdf.dropna(subset=['closest_way_id'])
 
