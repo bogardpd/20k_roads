@@ -2,8 +2,9 @@ import argparse
 import geopandas as gpd
 import hashlib
 import json
-import pandas as pd
 import osmium
+import pandas as pd
+import pickle
 import re
 import tomllib
 from collections import defaultdict
@@ -18,9 +19,13 @@ with open('config.toml', 'rb') as f:
 class OSMDataContainer():
     """Holds OSM data."""
     def __init__(self, osm_data_path, state_data_path):
-        self.osm_data_path: Path = osm_data_path
         self.state_data_path: Path = state_data_path
+        self.osm_data_path: Path = osm_data_path
+        self.osm_cache_path: Path = self.osm_data_path.with_suffix('.pickle')
         self.osm_checksum = self._osm_checksum()
+        self.osm_checksum_path = self.osm_data_path.with_suffix(
+            '.checksum.json'
+        )
         self.ways: gpd.GeoDataFrame | None = None
         self.ways_sindex = None
         self.node_ways: dict | None = None
@@ -28,20 +33,36 @@ class OSMDataContainer():
 
     def load_osm(self):
         """Loads OSM data."""
-        # TODO: check for pickle before processing data.
-        handler = RoadHandler(self.state_data_path)
-        handler.apply_file(self.osm_data_path, locations=True)
-        with open(self.osm_data_path.with_suffix('.checksum.json'), 'w') as f:
-            # Store checksum of OSM PBF file.
+        with open(self.osm_checksum_path, 'r') as f:
+            osm_cache_checksum = json.load(f)['checksum']
+        if osm_cache_checksum == self.osm_checksum:
+            # Load cached data.
+            with open(self.osm_cache_path, 'rb') as f:
+                data = pickle.load(f)
+        else:
+            # Process OSM data.
+            handler = RoadHandler(self.state_data_path)
+            handler.apply_file(self.osm_data_path, locations=True)
             metadata = {
                 'source': str(self.osm_data_path),
                 'checksum': self.osm_checksum,
                 'processed_at': datetime.now(timezone.utc).isoformat(),
             }
-            json.dump(metadata, f, indent=2)
-        self.ways = handler.ways
-        self.node_ways = handler.node_ways
-        self.ways_sindex = self.ways.sindex # Build spatial index
+            with open(self.osm_checksum_path, 'w') as f:
+                # Store checksum of OSM PBF file.
+                json.dump(metadata, f, indent=2)
+            data = {
+                'ways': handler.ways,
+                'node_ways': handler.node_ways,
+                'ways_sindex': handler.ways.sindex
+            }
+            # Cache processed data.
+            with open(self.osm_cache_path, 'wb') as f:
+                pickle.dump(data, f)
+
+        self.ways = data['ways']
+        self.node_ways = data['node_ways']
+        self.ways_sindex = data['ways_sindex'] # Build spatial index
 
     def _osm_checksum(self):
         h = hashlib.sha256()

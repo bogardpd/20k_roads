@@ -219,3 +219,6 @@ __marimo__/
 
 # OSM Data folder
 osm_data/
+
+# MacOS
+.DS_Store
