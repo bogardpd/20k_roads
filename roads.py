@@ -33,32 +33,24 @@ class OSMDataContainer():
 
     def load_osm(self):
         """Loads OSM data."""
-        with open(self.osm_checksum_path, 'r') as f:
-            osm_cache_checksum = json.load(f)['checksum']
-        if osm_cache_checksum == self.osm_checksum:
-            # Load cached data.
-            with open(self.osm_cache_path, 'rb') as f:
-                data = pickle.load(f)
+        if self.osm_checksum_path.is_file() and self.osm_cache_path.is_file():
+            with open(self.osm_checksum_path, 'r') as f:
+                osm_cache_checksum = json.load(f)['checksum']
+            if osm_cache_checksum == self.osm_checksum:
+                # Load cached data.
+                print("Loading OSM from cache...", end=" ")
+                with open(self.osm_cache_path, 'rb') as f:
+                    data = pickle.load(f)
+            else:
+                print(
+                    "OSM PBF has changed since last cache. Processing...",
+                    end=" ",
+                )
+                data = self._process_osm()
         else:
-            # Process OSM data.
-            handler = RoadHandler(self.state_data_path)
-            handler.apply_file(self.osm_data_path, locations=True)
-            metadata = {
-                'source': str(self.osm_data_path),
-                'checksum': self.osm_checksum,
-                'processed_at': datetime.now(timezone.utc).isoformat(),
-            }
-            with open(self.osm_checksum_path, 'w') as f:
-                # Store checksum of OSM PBF file.
-                json.dump(metadata, f, indent=2)
-            data = {
-                'ways': handler.ways,
-                'node_ways': handler.node_ways,
-                'ways_sindex': handler.ways.sindex
-            }
-            # Cache processed data.
-            with open(self.osm_cache_path, 'wb') as f:
-                pickle.dump(data, f)
+            print("No cache available. Processing OSM PBF...", end=" ")
+            data = self._process_osm()
+        print("done.")
 
         self.ways = data['ways']
         self.node_ways = data['node_ways']
@@ -70,6 +62,28 @@ class OSMDataContainer():
             while chunk := f.read(1 << 20):
                 h.update(chunk)
         return h.hexdigest()
+    
+    def _process_osm(self) -> dict:
+        """Processes the provided OSM PBF file."""
+        handler = RoadHandler(self.state_data_path)
+        handler.apply_file(self.osm_data_path, locations=True)
+        metadata = {
+            'source': str(self.osm_data_path),
+            'checksum': self.osm_checksum,
+            'processed_at': datetime.now(timezone.utc).isoformat(),
+        }
+        with open(self.osm_checksum_path, 'w') as f:
+            # Store checksum of OSM PBF file.
+            json.dump(metadata, f, indent=2)
+        data = {
+            'ways': handler.ways,
+            'node_ways': handler.node_ways,
+            'ways_sindex': handler.ways.sindex
+        }
+        # Cache processed data.
+        with open(self.osm_cache_path, 'wb') as f:
+            pickle.dump(data, f)
+        return data
         
 
 class RoadHandler(osmium.SimpleHandler):
@@ -117,7 +131,7 @@ class RoadHandler(osmium.SimpleHandler):
         ways['unique_name'] = ways.apply(unique_road_name, axis=1)
         return ways.to_crs(CONFIG['crs']['metric'])
 
-def find_roads(
+def count_roads(
     osm_data: Path,
     state_data: Path,
     track_file: Path,
@@ -125,16 +139,12 @@ def find_roads(
 ) -> None:
     """Matches tracks to unique OSM roads."""
 
-    print("Loading OSM data...", end=" ")
     osmdc = OSMDataContainer(osm_data, state_data)
     ways = osmdc.ways
     nodes = osmdc.node_ways
     ways_sindex = osmdc.ways_sindex # Build spatial index
-    print("done.")
 
-    print("Loading tracks...", end=" ")
-    tracks = build_tracks(track_file)
-    print("done.")
+    tracks = load_tracks(track_file)
 
     # Temporarily filter to a small subset of tracks.
     tracks = tracks[tracks['utc_start'] < "2010-01-16"]
@@ -200,8 +210,9 @@ def find_roads(
     visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
     print(f"Exported GeoPackage to {gpkg_path}")
 
-def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
+def load_tracks(track_file: Path) -> gpd.GeoDataFrame:
     """Creates a track GeoDataFrame."""
+    print("Loading tracks...", end=" ")
     tracks = gpd.read_file(
         track_file,
         layer='driving_tracks',
@@ -209,6 +220,7 @@ def build_tracks(track_file: Path) -> gpd.GeoDataFrame:
         columns=['utc_start'],
     )
     tracks = tracks.sort_values('utc_start')
+    print("done.")
     return tracks.to_crs(CONFIG['crs']['metric'])
 
 def get_closest_way(
@@ -305,7 +317,7 @@ def unique_road_name(row: pd.Series) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="find_roads",
+        prog="20k_roads",
         description="Matches GPS tracks to roads",
     )
     parser.add_argument('--osm',
@@ -329,4 +341,4 @@ if __name__ == "__main__":
         help="Directory to store output data",
     )
     args = parser.parse_args()
-    find_roads(args.osm, args.states, args.tracks, args.output_dir)
+    count_roads(args.osm, args.states, args.tracks, args.output_dir)
