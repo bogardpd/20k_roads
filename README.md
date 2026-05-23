@@ -19,7 +19,7 @@ python roads.py --osm region.osm.pbf --states tl_2023_us_state.zip --tracks trac
 
 Census TIGER state data can be found here: [https://www2.census.gov/geo/tiger/TIGER2023/STATE/tl_2023_us_state.zip](https://www2.census.gov/geo/tiger/TIGER2023/STATE/tl_2023_us_state.zip)
 
-OpenStreetMap PBF extracts can be downloaded from [Geofabrik downloads](https://download.geofabrik.de/). Once they're downloaded, use [Osmium Tool](https://osmcode.org/osmium-tool/) to filter them to only drivable roads with the following command:
+OpenStreetMap PBF extracts can be downloaded from [Geofabrik downloads](https://download.geofabrik.de/). Once they're downloaded, use [Osmium Tool](https://osmcode.org/osmium-tool/) to filter them to only drivable roads and road relations with the following command:
 
 ```
 osmium tags-filter region-latest.osm.pbf \
@@ -34,5 +34,6 @@ osmium tags-filter region-latest.osm.pbf \
   w/highway=trunk_link \
   w/highway=primary_link \
   w/highway=secondary_link \
+  r/type=route,route=road \
   -o region-roads-drivable.osm.pbf
 ```

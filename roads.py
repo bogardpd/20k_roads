@@ -54,7 +54,9 @@ class OSMDataContainer():
 
         self.ways = data['ways']
         self.node_ways = data['node_ways']
-        self.ways_sindex = data['ways_sindex'] # Build spatial index
+        self.numbered_routes = data['numbered_routes']
+        self.way_routes = data['way_routes']
+        self.ways_sindex = data['ways_sindex']
 
     def _osm_checksum(self):
         h = hashlib.sha256()
@@ -78,7 +80,9 @@ class OSMDataContainer():
         data = {
             'ways': handler.ways,
             'node_ways': handler.node_ways,
-            'ways_sindex': handler.ways.sindex
+            'numbered_routes': handler.numbered_routes,
+            'way_routes': handler.way_routes,
+            'ways_sindex': handler.ways.sindex, # Build spatial index
         }
         # Cache processed data.
         with open(self.osm_cache_path, 'wb') as f:
@@ -93,6 +97,8 @@ class RoadHandler(osmium.SimpleHandler):
         self.state_data = state_data
         self.rows = []
         self.node_ways = defaultdict(set)
+        self.numbered_routes = {}
+        self.way_routes = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
 
     def way(self, w):
@@ -114,6 +120,24 @@ class RoadHandler(osmium.SimpleHandler):
         })
         for node in [w.nodes[0], w.nodes[-1]]:
             self.node_ways[node.ref].add(w.id)
+
+    def relation(self, r):
+        """Processing for each relation in OSM data."""
+        tags = dict(r.tags)
+        if tags.get('type') != "route" or tags.get('route') != "road":
+            return
+        if tags.get('network') not in CONFIG['networks']:
+            return
+        members = [m.ref for m in r.members if m.type == "w"]
+        if len(members) == 0:
+            return
+        self.numbered_routes[r.id] = {
+            'network': tags.get('network'),
+            'ref': tags.get('ref'),
+            'ways': members,
+        }
+        for member in members:
+            self.way_routes[member].add(r.id)
 
     @property
     def ways(self):
@@ -142,7 +166,9 @@ def count_roads(
     osmdc = OSMDataContainer(osm_data, state_data)
     ways = osmdc.ways
     nodes = osmdc.node_ways
-    ways_sindex = osmdc.ways_sindex # Build spatial index
+    numbered_routes = osmdc.numbered_routes
+    way_routes = osmdc.way_routes
+    ways_sindex = osmdc.ways_sindex
 
     tracks = load_tracks(track_file)
 
