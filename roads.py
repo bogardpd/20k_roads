@@ -1,158 +1,17 @@
 """Matches driving log tracks to OpenStreetMap roads."""
 import argparse
 import geopandas as gpd
-import hashlib
-import json
-import osmium
 import pandas as pd
-import pickle
 import re
 import tomllib
-from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
 from shapely.wkb import loads as wkb_loads
 
+from osm import load_osm
+
 with open('config.toml', 'rb') as config_file:
     CONFIG = tomllib.load(config_file)
-
-class OSMDataContainer():
-    """Holds OSM data."""
-    def __init__(self, osm_data_path):
-        self.osm_data_path: Path = osm_data_path
-        self.osm_cache_path: Path = self.osm_data_path.with_suffix('.pickle')
-        self.osm_checksum = self._osm_checksum()
-        self.osm_checksum_path = self.osm_data_path.with_suffix(
-            '.checksum.json'
-        )
-        self.ways: gpd.GeoDataFrame | None = None
-        self.ways_sindex = None
-        self.node_ways: dict | None = None
-        self.load_osm()
-
-    def load_osm(self):
-        """Loads OSM data."""
-        if self.osm_checksum_path.is_file() and self.osm_cache_path.is_file():
-            with open(self.osm_checksum_path, 'r', encoding='utf-8') as csf:
-                osm_cache_checksum = json.load(csf)['checksum']
-            if osm_cache_checksum == self.osm_checksum:
-                # Load cached data.
-                print("Loading OSM from cache...", end=" ", flush=True)
-                with open(self.osm_cache_path, 'rb') as cf:
-                    data = pickle.load(cf)
-            else:
-                print(
-                    "OSM PBF has changed since last cache. Processing...",
-                    end=" ",
-                    flush=True,
-                )
-                data = self._process_osm()
-        else:
-            print(
-                "No cache available. Processing OSM PBF...",
-                end=" ",
-                flush=True,
-            )
-            data = self._process_osm()
-        print("done.")
-
-        self.ways = data['ways']
-        self.node_ways = data['node_ways']
-        self.numbered_routes = data['numbered_routes']
-        self.way_routes = data['way_routes']
-        self.ways_sindex = data['ways_sindex']
-
-    def _osm_checksum(self):
-        h = hashlib.sha256()
-        with open(self.osm_data_path, 'rb') as f:
-            while chunk := f.read(1 << 20):
-                h.update(chunk)
-        return h.hexdigest()
-
-    def _process_osm(self) -> dict:
-        """Processes the provided OSM PBF file."""
-        handler = RoadHandler()
-        handler.apply_file(self.osm_data_path, locations=True)
-        metadata = {
-            'source': str(self.osm_data_path),
-            'checksum': self.osm_checksum,
-            'processed_at': datetime.now(timezone.utc).isoformat(),
-        }
-        with open(self.osm_checksum_path, 'w', encoding='utf-8') as f:
-            # Store checksum of OSM PBF file.
-            json.dump(metadata, f, indent=2)
-        data = {
-            'ways': handler.ways,
-            'node_ways': handler.node_ways,
-            'numbered_routes': handler.numbered_routes,
-            'way_routes': handler.way_routes,
-            'ways_sindex': handler.ways.sindex, # Build spatial index
-        }
-        # Cache processed data.
-        with open(self.osm_cache_path, 'wb') as f:
-            pickle.dump(data, f)
-        return data
-
-
-class RoadHandler(osmium.SimpleHandler):
-    """Processes OSM roads."""
-    def __init__(self):
-        super().__init__()
-        self.rows = []
-        self.node_ways = defaultdict(set)
-        self.numbered_routes = {}
-        self.way_routes = defaultdict(set)
-        self._factory = osmium.geom.WKBFactory()
-
-    def way(self, w):
-        """Processing for each way in OSM data."""
-        if 'highway' not in w.tags:
-            return
-        try:
-            geom = wkb_loads(self._factory.create_linestring(w), hex=True)
-        except osmium.InvalidLocationError:
-            return
-        self.rows.append({
-            'geometry': geom,
-            'id': w.id,
-            'highway': w.tags.get('highway'),
-            'road_name': w.tags.get('name'),
-            'route_ref': w.tags.get('ref'),
-            'first_node': w.nodes[0].ref,
-            'last_node': w.nodes[-1].ref,
-        })
-        for node in [w.nodes[0], w.nodes[-1]]:
-            self.node_ways[node.ref].add(w.id)
-
-    def relation(self, r):
-        """Processing for each relation in OSM data."""
-        tags = dict(r.tags)
-        if tags.get('type') != "route" or tags.get('route') != "road":
-            return
-        if tags.get('network') not in CONFIG['networks']:
-            return
-        members = [m.ref for m in r.members if m.type == "w"]
-        if len(members) == 0:
-            return
-        self.numbered_routes[r.id] = {
-            'network': tags.get('network'),
-            'ref': tags.get('ref'),
-            'ways': members,
-        }
-        for member in members:
-            self.way_routes[member].add(r.id)
-
-    @property
-    def ways(self) -> gpd.GeoDataFrame:
-        """Creates a GeoDataFrame of ways."""
-        ways = gpd.GeoDataFrame(
-            self.rows,
-            crs=CONFIG['crs']['osm'],
-        ).set_index('id')
-        ways['formatted_name'] = ways.apply(format_road_name, axis=1)
-        return ways.to_crs(CONFIG['crs']['metric'])
-
 
 def count_roads(
     osm_data: Path,
@@ -162,12 +21,12 @@ def count_roads(
     """Matches tracks to unique OSM roads."""
 
     print(f"Loading OSM data from {osm_data}. This may take a while.")
-    osmdc = OSMDataContainer(osm_data)
-    ways = osmdc.ways
-    nodes = osmdc.node_ways
-    numbered_routes = osmdc.numbered_routes
-    way_routes = osmdc.way_routes
-    ways_sindex = osmdc.ways_sindex
+    osm = load_osm(osm_data)
+    ways = osm['ways']
+    nodes = osm['node_ways']
+    numbered_routes = osm['numbered_routes']
+    way_routes = osm['way_routes']
+    ways_sindex = osm['ways_sindex']
 
     tracks = load_tracks(track_file)
 
