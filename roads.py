@@ -44,67 +44,7 @@ class RoadCounter():
         for track_fid, track in self.tracks.iterrows():
             print(f"Processing track {track_fid} ({track.utc_start})")
             for segment in track.geometry.geoms:
-                seg_ways = self._get_segment_ways(segment).to_frame()
-                seg_ways = seg_ways.join(
-                    self.ways[['road_name', 'route_ref', 'formatted_name']],
-                    on='way_id',
-                )
-                seg_ways = seg_ways.dropna(subset='formatted_name')
-                for _, seg_way in seg_ways.iterrows():
-                    if seg_way.way_id in self.visited_road_way_ids:
-                        continue
-                    if seg_way.way_id in self.way_routes:
-                        # This way is part of at least one numbered route.
-                        # Get associated ways from relations index.
-                        for r_id in self.way_routes[seg_way.way_id]:
-                            self.visited_road_count += 1
-                            route_all_ways = set()
-                            if r_id in self.route_superroutes:
-                                # Route belongs to a superroute. Get ways
-                                # from all sibling routes too.
-                                for superroute_id in self.route_superroutes[r_id]:
-                                    superroute = self.superroutes[superroute_id]
-                                    print("superroute", superroute)
-                                    name = format_numbered_route(superroute)
-                                    for subroute_id in superroute['routes']:
-                                        subroute = self.routes.get(subroute_id)
-                                        if subroute is not None:
-                                            route_all_ways.update(subroute['ways'])
-                            else:
-                                # Route does not belong to a superroute.
-                                # Just use it as is.
-                                route = self.routes[r_id]
-                                name = format_numbered_route(route)
-                                route_all_ways.update(route['ways'])
-                            self.visited_road_way_ids.update(route_all_ways)
-                            mutual_way_ids = self.ways.index.intersection(route_all_ways)
-                            self.visited_road_records.append({
-                                'visit_order': self.visited_road_count,
-                                'name': name,
-                                'is_numbered_route': True,
-                                'track_fid': track_fid,
-                                'track_utc_start': track.utc_start,
-                                'geometry': MultiLineString(
-                                    self.ways['geometry'].loc[mutual_way_ids].to_list()
-                                ),
-                            })
-                    else:
-                        # Follow ways by road name.
-                        seg_road_ways = dict()
-                        self._get_road_way_ids(
-                            seg_road_ways,
-                            seg_way.way_id,
-                            seg_way.road_name,
-                        )
-                        self.visited_road_count += 1
-                        self.visited_road_records.append({
-                            'visit_order': self.visited_road_count,
-                            'name': seg_way.formatted_name,
-                            'is_numbered_route': False,
-                            'track_fid': track_fid,
-                            'track_utc_start': track.utc_start,
-                            'geometry': MultiLineString(seg_road_ways.values()),
-                        })
+                self._collect_segment(segment, track_fid, track.utc_start)
 
     def export_roads(self):
         """Saves road data to a file."""
@@ -120,6 +60,71 @@ class RoadCounter():
         gpkg_path = self.output_dir / CONFIG['output']['gpkg']
         visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
         print(f"Exported GeoPackage to {gpkg_path}.")
+
+
+    def _collect_segment(self, segment, track_fid, track_utc_start):
+        """Collects roads for a given driving track segment."""
+        seg_ways = self._get_segment_ways(segment).to_frame()
+        seg_ways = seg_ways.join(
+            self.ways[['road_name', 'route_ref', 'formatted_name']],
+            on='way_id',
+        )
+        seg_ways = seg_ways.dropna(subset='formatted_name')
+        for _, seg_way in seg_ways.iterrows():
+            if seg_way.way_id in self.visited_road_way_ids:
+                continue
+            if seg_way.way_id in self.way_routes:
+                # This way is part of at least one numbered route.
+                # Get associated ways from relations index.
+                for r_id in self.way_routes[seg_way.way_id]:
+                    self.visited_road_count += 1
+                    route_all_ways = set()
+                    if r_id in self.route_superroutes:
+                        # Route belongs to a superroute. Get ways
+                        # from all sibling routes too.
+                        for superroute_id in self.route_superroutes[r_id]:
+                            superroute = self.superroutes[superroute_id]
+                            print("superroute", superroute)
+                            name = format_numbered_route(superroute)
+                            for subroute_id in superroute['routes']:
+                                subroute = self.routes.get(subroute_id)
+                                if subroute is not None:
+                                    route_all_ways.update(subroute['ways'])
+                    else:
+                        # Route does not belong to a superroute.
+                        # Just use it as is.
+                        route = self.routes[r_id]
+                        name = format_numbered_route(route)
+                        route_all_ways.update(route['ways'])
+                    self.visited_road_way_ids.update(route_all_ways)
+                    mutual_way_ids = self.ways.index.intersection(route_all_ways)
+                    self.visited_road_records.append({
+                        'visit_order': self.visited_road_count,
+                        'name': name,
+                        'is_numbered_route': True,
+                        'track_fid': track_fid,
+                        'track_utc_start': track_utc_start,
+                        'geometry': MultiLineString(
+                            self.ways['geometry'].loc[mutual_way_ids].to_list()
+                        ),
+                    })
+            else:
+                # Follow ways by road name.
+                seg_road_ways = dict()
+                self._get_road_way_ids(
+                    seg_road_ways,
+                    seg_way.way_id,
+                    seg_way.road_name,
+                )
+                self.visited_road_count += 1
+                self.visited_road_records.append({
+                    'visit_order': self.visited_road_count,
+                    'name': seg_way.formatted_name,
+                    'is_numbered_route': False,
+                    'track_fid': track_fid,
+                    'track_utc_start': track_utc_start,
+                    'geometry': MultiLineString(seg_road_ways.values()),
+                })
 
     def _get_closest_way(self, coords: tuple) -> int:
         """Looks up the closest OSM way to a given coordinate."""
