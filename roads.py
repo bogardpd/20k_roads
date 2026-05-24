@@ -156,6 +156,7 @@ def count_roads(
 ) -> None:
     """Matches tracks to unique OSM roads."""
 
+    print(f"Loading OSM data from {osm_data}. This may take a while.")
     osmdc = OSMDataContainer(osm_data)
     ways = osmdc.ways
     nodes = osmdc.node_ways
@@ -166,7 +167,7 @@ def count_roads(
     tracks = load_tracks(track_file)
 
     # Temporarily filter to a small subset of tracks.
-    tracks = tracks[tracks['utc_start'] < "2010-01-16"]
+    tracks = tracks[tracks['utc_start'] < "2010-06-19"]
 
     visited_road_way_ids = set()
     visited_road_records = []
@@ -193,6 +194,9 @@ def count_roads(
                         visited_road_records.append({
                             'visit_order': visited_road_count,
                             'name': format_numbered_route(route),
+                            'is_numbered_route': True,
+                            'track_fid': track_fid,
+                            'track_utc_start': track.utc_start,
                             'geometry': MultiLineString(
                                 ways['geometry'].loc[route['ways']].to_list()
                             ),
@@ -212,6 +216,9 @@ def count_roads(
                     visited_road_records.append({
                         'visit_order': visited_road_count,
                         'name': seg_way.formatted_name,
+                        'is_numbered_route': False,
+                        'track_fid': track_fid,
+                        'track_utc_start': track.utc_start,
                         'geometry': MultiLineString(seg_road_ways.values()),
                     })
 
