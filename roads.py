@@ -1,3 +1,4 @@
+"""Matches driving log tracks to OpenStreetMap roads."""
 import argparse
 import geopandas as gpd
 import hashlib
@@ -13,8 +14,8 @@ from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
 from shapely.wkb import loads as wkb_loads
 
-with open('config.toml', 'rb') as f:
-    CONFIG = tomllib.load(f)
+with open('config.toml', 'rb') as config_file:
+    CONFIG = tomllib.load(config_file)
 
 class OSMDataContainer():
     """Holds OSM data."""
@@ -33,13 +34,13 @@ class OSMDataContainer():
     def load_osm(self):
         """Loads OSM data."""
         if self.osm_checksum_path.is_file() and self.osm_cache_path.is_file():
-            with open(self.osm_checksum_path, 'r') as f:
-                osm_cache_checksum = json.load(f)['checksum']
+            with open(self.osm_checksum_path, 'r', encoding='utf-8') as csf:
+                osm_cache_checksum = json.load(csf)['checksum']
             if osm_cache_checksum == self.osm_checksum:
                 # Load cached data.
                 print("Loading OSM from cache...", end=" ")
-                with open(self.osm_cache_path, 'rb') as f:
-                    data = pickle.load(f)
+                with open(self.osm_cache_path, 'rb') as cf:
+                    data = pickle.load(cf)
             else:
                 print(
                     "OSM PBF has changed since last cache. Processing...",
@@ -73,7 +74,7 @@ class OSMDataContainer():
             'checksum': self.osm_checksum,
             'processed_at': datetime.now(timezone.utc).isoformat(),
         }
-        with open(self.osm_checksum_path, 'w') as f:
+        with open(self.osm_checksum_path, 'w', encoding='utf-8') as f:
             # Store checksum of OSM PBF file.
             json.dump(metadata, f, indent=2)
         data = {
