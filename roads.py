@@ -64,7 +64,7 @@ class OSMDataContainer():
             while chunk := f.read(1 << 20):
                 h.update(chunk)
         return h.hexdigest()
-    
+
     def _process_osm(self) -> dict:
         """Processes the provided OSM PBF file."""
         handler = RoadHandler(self.state_data_path)
@@ -88,7 +88,7 @@ class OSMDataContainer():
         with open(self.osm_cache_path, 'wb') as f:
             pickle.dump(data, f)
         return data
-        
+
 
 class RoadHandler(osmium.SimpleHandler):
     """Processes OSM roads."""
@@ -155,6 +155,7 @@ class RoadHandler(osmium.SimpleHandler):
         ways['unique_name'] = ways.apply(unique_road_name, axis=1)
         return ways.to_crs(CONFIG['crs']['metric'])
 
+
 def count_roads(
     osm_data: Path,
     state_data: Path,
@@ -191,7 +192,22 @@ def count_roads(
             for _, seg_way in seg_ways.iterrows():
                 if seg_way.way_id in visited_road_way_ids:
                     continue
-                if pd.isna(seg_way.route_ref):
+                if seg_way.way_id in way_routes:
+                    # This way is part of at least one numbered route.
+                    # Get associated ways from relations index.
+                    for r_id in way_routes[seg_way.way_id]:
+                        route = numbered_routes[r_id]
+                        visited_road_way_ids.update(route['ways'])
+                        visited_road_count += 1
+                        visited_road_records.append({
+                            'visit_order': visited_road_count,
+                            'name': format_numbered_route(route),
+                            'geometry': MultiLineString(
+                                ways['geometry'].loc[route['ways']].to_list()
+                            ),
+                        })
+                else:
+                    # Follow ways by road name.
                     seg_road_ways = dict()
                     get_road_way_ids(
                         ways,
@@ -207,26 +223,10 @@ def count_roads(
                         'name': seg_way.unique_name,
                         'geometry': MultiLineString(seg_road_ways.values()),
                     })
-                else:
-                    for route_ref in seg_way.route_ref.split(";"):
-                        seg_road_ways = dict()
-                        get_road_way_ids(
-                            ways,
-                            nodes,
-                            visited_road_way_ids,
-                            seg_road_ways,
-                            seg_way.way_id,
-                            route_ref=route_ref,
-                        )
-                        visited_road_count += 1
-                        visited_road_records.append({
-                            'visit_order': visited_road_count,
-                            'name': route_ref,
-                            'geometry': MultiLineString(
-                                seg_road_ways.values()
-                            ),
-                        })
-    
+
+    if len(visited_road_records) == 0:
+        print("No roads found.")
+        return
     visited_road_gdf = gpd.GeoDataFrame(
         visited_road_records,
         geometry='geometry',
@@ -248,6 +248,16 @@ def load_tracks(track_file: Path) -> gpd.GeoDataFrame:
     tracks = tracks.sort_values('utc_start')
     print("done.")
     return tracks.to_crs(CONFIG['crs']['metric'])
+
+def format_numbered_route(route: dict) -> str:
+    if route['network'] == "US:I":
+        return f"I-{route['ref']}"
+    if route['network'] == "US:US":
+        return f"US-{route['ref']}"
+    match = re.search(r"^US:(?!US)([A-Z]{2})$", route['network'])
+    if match:
+        return f"{match.group(1)}-{route['ref']}"
+    return f"{route['network']}"
 
 def get_closest_way(
     roads: gpd.GeoDataFrame,
