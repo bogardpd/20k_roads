@@ -18,8 +18,7 @@ with open('config.toml', 'rb') as f:
 
 class OSMDataContainer():
     """Holds OSM data."""
-    def __init__(self, osm_data_path, state_data_path):
-        self.state_data_path: Path = state_data_path
+    def __init__(self, osm_data_path):
         self.osm_data_path: Path = osm_data_path
         self.osm_cache_path: Path = self.osm_data_path.with_suffix('.pickle')
         self.osm_checksum = self._osm_checksum()
@@ -67,7 +66,7 @@ class OSMDataContainer():
 
     def _process_osm(self) -> dict:
         """Processes the provided OSM PBF file."""
-        handler = RoadHandler(self.state_data_path)
+        handler = RoadHandler()
         handler.apply_file(self.osm_data_path, locations=True)
         metadata = {
             'source': str(self.osm_data_path),
@@ -92,9 +91,8 @@ class OSMDataContainer():
 
 class RoadHandler(osmium.SimpleHandler):
     """Processes OSM roads."""
-    def __init__(self, state_data):
+    def __init__(self):
         super().__init__()
-        self.state_data = state_data
         self.rows = []
         self.node_ways = defaultdict(set)
         self.numbered_routes = {}
@@ -140,31 +138,24 @@ class RoadHandler(osmium.SimpleHandler):
             self.way_routes[member].add(r.id)
 
     @property
-    def ways(self):
-        states = gpd.read_file(self.state_data)
-        states = states[['STUSPS', 'NAME', 'geometry']].rename(columns={
-            'STUSPS': 'state_abbr',
-            'NAME': 'state_name',
-        }).to_crs(CONFIG['crs']['osm'])
+    def ways(self) -> gpd.GeoDataFrame:
+        """Creates a GeoDataFrame of ways."""
         ways = gpd.GeoDataFrame(
             self.rows,
             crs=CONFIG['crs']['osm'],
         ).set_index('id')
-        # Spatially join U.S. states onto ways.
-        ways = gpd.sjoin(ways, states, how='left', predicate='within')
-        ways['unique_name'] = ways.apply(unique_road_name, axis=1)
+        ways['formatted_name'] = ways.apply(format_road_name, axis=1)
         return ways.to_crs(CONFIG['crs']['metric'])
 
 
 def count_roads(
     osm_data: Path,
-    state_data: Path,
     track_file: Path,
     output_dir: Path,
 ) -> None:
     """Matches tracks to unique OSM roads."""
 
-    osmdc = OSMDataContainer(osm_data, state_data)
+    osmdc = OSMDataContainer(osm_data)
     ways = osmdc.ways
     nodes = osmdc.node_ways
     numbered_routes = osmdc.numbered_routes
@@ -176,7 +167,6 @@ def count_roads(
     # Temporarily filter to a small subset of tracks.
     tracks = tracks[tracks['utc_start'] < "2010-01-16"]
 
-    unique_roads = {}
     visited_road_way_ids = set()
     visited_road_records = []
     visited_road_count = 0
@@ -185,10 +175,10 @@ def count_roads(
         for segment in track.geometry.geoms:
             seg_ways = get_segment_ways(ways, ways_sindex, segment).to_frame()
             seg_ways = seg_ways.join(
-                ways[['road_name', 'route_ref', 'unique_name']],
+                ways[['road_name', 'route_ref', 'formatted_name']],
                 on='way_id',
             )
-            seg_ways = seg_ways.dropna(subset='unique_name')
+            seg_ways = seg_ways.dropna(subset='formatted_name')
             for _, seg_way in seg_ways.iterrows():
                 if seg_way.way_id in visited_road_way_ids:
                     continue
@@ -220,7 +210,7 @@ def count_roads(
                     visited_road_count += 1
                     visited_road_records.append({
                         'visit_order': visited_road_count,
-                        'name': seg_way.unique_name,
+                        'name': seg_way.formatted_name,
                         'geometry': MultiLineString(seg_road_ways.values()),
                     })
 
@@ -250,6 +240,7 @@ def load_tracks(track_file: Path) -> gpd.GeoDataFrame:
     return tracks.to_crs(CONFIG['crs']['metric'])
 
 def format_numbered_route(route: dict) -> str:
+    """Formats a numbered route identifier."""
     if route['network'] == "US:I":
         return f"I-{route['ref']}"
     if route['network'] == "US:US":
@@ -258,6 +249,12 @@ def format_numbered_route(route: dict) -> str:
     if match:
         return f"{match.group(1)}-{route['ref']}"
     return f"{route['network']}"
+
+def format_road_name(row: pd.Series) -> str:
+    """Formats a road name for an OSM way."""
+    if pd.isna(row.route_ref):
+        return row.road_name
+    return row.route_ref
 
 def get_closest_way(
     roads: gpd.GeoDataFrame,
@@ -341,14 +338,7 @@ def get_segment_ways(
         streaks['streak_length'] >= CONFIG['search']['consec_pts']
     ]['closest_way_id'].rename('way_id')
 
-def unique_road_name(row: pd.Series) -> str:
-    """Formats a road name for an OSM way."""
-    if pd.isna(row.route_ref):
-        return row.road_name
-    if re.match(r'SR ', row.route_ref):
-        # Prepend state abbreviation to state route.
-        return f"{row.state_abbr} {row.route_ref}"
-    return row.route_ref
+
 
 
 if __name__ == "__main__":
@@ -361,11 +351,6 @@ if __name__ == "__main__":
         required=True,
         help="OpenStreetMap PBF file covering the region of the tracks",
     )
-    parser.add_argument('--states',
-        type=Path,
-        required=True,
-        help="Census TIGER data for U.S. state boundaries",
-    )
     parser.add_argument('--tracks',
         type=Path,
         required=True,
@@ -377,4 +362,4 @@ if __name__ == "__main__":
         help="Directory to store output data",
     )
     args = parser.parse_args()
-    count_roads(args.osm, args.states, args.tracks, args.output_dir)
+    count_roads(args.osm, args.tracks, args.output_dir)
