@@ -32,5 +32,6 @@ osmium tags-filter region-latest.osm.pbf \
   w/highway=primary_link \
   w/highway=secondary_link \
   r/type=route,route=road \
+  r/type=superroute,route=road \
   -o region-roads-drivable.osm.pbf
 ```

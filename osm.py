@@ -21,6 +21,8 @@ class RoadHandler(osmium.SimpleHandler):
         self.node_ways = defaultdict(set)
         self.numbered_routes = {}
         self.way_routes = defaultdict(set)
+        self.superroutes = {}
+        self.route_superroutes = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
 
     def way(self, w):
@@ -46,20 +48,32 @@ class RoadHandler(osmium.SimpleHandler):
     def relation(self, r):
         """Processing for each relation in OSM data."""
         tags = dict(r.tags)
-        if tags.get('type') != "route" or tags.get('route') != "road":
-            return
         if tags.get('network') not in CONFIG['networks']:
             return
-        members = [m.ref for m in r.members if m.type == "w"]
-        if len(members) == 0:
+        if tags.get('route') != "road":
             return
-        self.numbered_routes[r.id] = {
-            'network': tags.get('network'),
-            'ref': tags.get('ref'),
-            'ways': members,
-        }
-        for member in members:
-            self.way_routes[member].add(r.id)
+        if tags.get('type') == "superroute":
+            sr_members = [m.ref for m in r.members if m.type == "r"]
+            if len(sr_members) == 0:
+                return
+            self.superroutes[r.id] = {
+                'network': tags.get('network'),
+                'ref': tags.get('ref'),
+                'routes': sr_members,
+            }
+            for sr_member in sr_members:
+                self.route_superroutes[sr_member].add(r.id)
+        elif tags.get('type') == "route":
+            r_members = [m.ref for m in r.members if m.type == "w"]
+            if len(r_members) == 0:
+                return
+            self.numbered_routes[r.id] = {
+                'network': tags.get('network'),
+                'ref': tags.get('ref'),
+                'ways': r_members,
+            }
+            for r_member in r_members:
+                self.way_routes[r_member].add(r.id)
 
     @property
     def ways(self) -> gpd.GeoDataFrame:
@@ -138,6 +152,8 @@ def _process_osm(osm_data_path) -> dict:
         'node_ways': handler.node_ways,
         'numbered_routes': handler.numbered_routes,
         'way_routes': handler.way_routes,
+        'superroutes': handler.superroutes,
+        'route_superroutes': handler.route_superroutes,
         'ways_sindex': handler.ways.sindex, # Build spatial index
     }
     # Cache processed data.

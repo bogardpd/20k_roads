@@ -26,6 +26,8 @@ def count_roads(
     nodes = osm['node_ways']
     numbered_routes = osm['numbered_routes']
     way_routes = osm['way_routes']
+    superroutes = osm['superroutes']
+    route_superroutes = osm['route_superroutes']
     ways_sindex = osm['ways_sindex']
 
     tracks = load_tracks(track_file)
@@ -52,17 +54,35 @@ def count_roads(
                     # This way is part of at least one numbered route.
                     # Get associated ways from relations index.
                     for r_id in way_routes[seg_way.way_id]:
-                        route = numbered_routes[r_id]
-                        visited_road_way_ids.update(route['ways'])
                         visited_road_count += 1
+                        route_all_ways = set()
+                        if r_id in route_superroutes:
+                            # Route belongs to a superroute. Get ways
+                            # from all sibling routes too.
+                            for superroute_id in route_superroutes[r_id]:
+                                superroute = superroutes[superroute_id]
+                                print("superroute", superroute)
+                                name = format_numbered_route(superroute)
+                                for subroute_id in superroute['routes']:
+                                    subroute = numbered_routes.get(subroute_id)
+                                    if subroute is not None:
+                                        route_all_ways.update(subroute['ways'])
+                        else:
+                            # Route does not belong to a superroute.
+                            # Just use it as is.
+                            route = numbered_routes[r_id]
+                            name = format_numbered_route(route)
+                            route_all_ways.update(route['ways'])
+                        visited_road_way_ids.update(route_all_ways)
+                        mutual_way_ids = ways.index.intersection(route_all_ways)
                         visited_road_records.append({
                             'visit_order': visited_road_count,
-                            'name': format_numbered_route(route),
+                            'name': name,
                             'is_numbered_route': True,
                             'track_fid': track_fid,
                             'track_utc_start': track.utc_start,
                             'geometry': MultiLineString(
-                                ways['geometry'].loc[route['ways']].to_list()
+                                ways['geometry'].loc[mutual_way_ids].to_list()
                             ),
                         })
                 else:
