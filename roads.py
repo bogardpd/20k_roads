@@ -106,6 +106,9 @@ class RoadCounter():
                             'geometry': MultiLineString(seg_road_ways.values()),
                         })
 
+    def export_roads(self):
+        """Saves road data to a file."""
+
         if len(self.visited_road_records) == 0:
             print("No roads found.")
             return
@@ -116,7 +119,7 @@ class RoadCounter():
         ).to_crs(CONFIG['crs']['output'])
         gpkg_path = self.output_dir / CONFIG['output']['gpkg']
         visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
-        print(f"Exported GeoPackage to {gpkg_path}")
+        print(f"Exported GeoPackage to {gpkg_path}.")
 
     def _get_closest_way(self, coords: tuple) -> int:
         """Looks up the closest OSM way to a given coordinate."""
@@ -255,6 +258,7 @@ if __name__ == "__main__":
         help="Directory to store output data",
     )
     args = parser.parse_args()
-    # count_roads(args.osm, args.tracks, args.output_dir)
+
     rc = RoadCounter(args.osm, args.tracks, args.output_dir)
     rc.collect_roads()
+    rc.export_roads()
