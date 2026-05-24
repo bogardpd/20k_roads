@@ -86,6 +86,7 @@ class RoadHandler(osmium.SimpleHandler):
         return ways.to_crs(CONFIG['crs']['metric'])
 
 def load_osm(osm_data_path):
+    """Loads data from OSM PBF file."""
     cache_path = _cache_path(osm_data_path)
     checksum_path = _checksum_path(osm_data_path)
 
