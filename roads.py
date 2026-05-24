@@ -38,17 +38,22 @@ class OSMDataContainer():
                 osm_cache_checksum = json.load(csf)['checksum']
             if osm_cache_checksum == self.osm_checksum:
                 # Load cached data.
-                print("Loading OSM from cache...", end=" ")
+                print("Loading OSM from cache...", end=" ", flush=True)
                 with open(self.osm_cache_path, 'rb') as cf:
                     data = pickle.load(cf)
             else:
                 print(
                     "OSM PBF has changed since last cache. Processing...",
                     end=" ",
+                    flush=True,
                 )
                 data = self._process_osm()
         else:
-            print("No cache available. Processing OSM PBF...", end=" ")
+            print(
+                "No cache available. Processing OSM PBF...",
+                end=" ",
+                flush=True,
+            )
             data = self._process_osm()
         print("done.")
 
@@ -236,7 +241,7 @@ def count_roads(
 
 def load_tracks(track_file: Path) -> gpd.GeoDataFrame:
     """Creates a track GeoDataFrame."""
-    print("Loading tracks...", end=" ")
+    print("Loading tracks...", end=" ", flush=True)
     tracks = gpd.read_file(
         track_file,
         layer='driving_tracks',
