@@ -229,10 +229,6 @@ class RoadCounter():
         )
         tracks = tracks.sort_values('utc_start')
         print("done.")
-
-        # Temporarily filter to a small subset of tracks.
-        tracks = tracks[tracks['utc_start'] < "2012-01-01"]
-
         self.tracks = tracks.to_crs(CONFIG['crs']['metric'])
 
     def _trace_road(self, way: pd.Series, track_fid: int):
