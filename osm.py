@@ -50,6 +50,8 @@ class RoadHandler(osmium.SimpleHandler):
         tags = dict(r.tags)
         if tags.get('network') not in CONFIG['networks']:
             return
+        if tags.get('ref') is None:
+            return
         if tags.get('route') != "road":
             return
         if tags.get('type') not in ["route", "superroute"]:
@@ -117,10 +119,15 @@ def load_osm(osm_data_path):
     return data
 
 def format_road_name(row: pd.Series) -> str:
-    """Formats a road name for an OSM way."""
-    if pd.isna(row.route_ref):
-        return row.road_name
-    return row.route_ref
+    """
+    Formats a road name for an OSM way.
+    Generally only used for roads that have no ref or whose ref isn't in
+    the networks list in config, as those roads will use
+    format_numbered_route.
+    """
+    if pd.isna(row.road_name):
+        return row.route_ref
+    return row.road_name
 
 def _cache_path(osm_data_path):
     return osm_data_path.with_suffix('.pickle')

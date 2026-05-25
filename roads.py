@@ -268,7 +268,7 @@ def format_numbered_route(route: dict) -> str:
     network = route['network'].split(":")
     if network[0] == "US":
         if len(network) > 2:
-            return f"{network[1]}-{route['ref']} {network[2]}"
+            return f"{network[1]}-{route['ref']} {" ".join(network[2:])}"
         return f"{network[1]}-{route['ref']}"
     return f"{route['network']}"
 

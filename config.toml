@@ -1,7 +1,7 @@
 networks = [
     # Networks to include the entire length of as one road.
     # US Interstates:
-    "US:I", "US:I:Business", "US:I:Express",
+    "US:I", "US:I:Business", "US:I:Business:Loop", "US:I:Express", "US:I:Express:Toll",
     # US Routes:
     "US:US", "US:US:Business", "US:US:Express",
     # US State Routes:
@@ -14,7 +14,7 @@ networks = [
     "US:CT",
     "US:DC",
     "US:DE",
-    "US:FL",
+    "US:FL", "US:FL:Toll",
     "US:GA",
     "US:HI",
     "US:IA",
@@ -22,7 +22,7 @@ networks = [
     "US:IL",
     "US:IN",
     "US:KS",
-    "US:KY",
+    "US:KY", "US:KY:Business",
     "US:LA",
     "US:MA",
     "US:MD",
@@ -40,7 +40,7 @@ networks = [
     "US:NM",
     "US:NY",
     "US:ND",
-    "US:OH",
+    "US:OH", "US:OH:Bypass", "US:OH:Truck",
     "US:OK",
     "US:OR",
     "US:PA",
@@ -49,11 +49,11 @@ networks = [
     "US:SC",
     "US:SD",
     "US:TN",
-    "US:TX",
+    "US:TX", "US:TX:FM", "US:TX:Loop", "US:TX:Spur",
     "US:UT",
-    "US:VA",
+    "US:VA", "US:VA:Secondary",
     "US:VT",
-    "US:WA",
+    "US:WA", "US:WA:Spur",
     "US:WI",
     "US:WV",
     "US:WY",
