@@ -137,9 +137,14 @@ class RoadCounter():
             crs=CONFIG['crs']['metric'],
         )
         # Get the closest way for every point.
-        points_gdf['closest_way_id'] = points_gdf.geometry.apply(
+        closest_way_ids = points_gdf.geometry.apply(
             lambda r: self._get_closest_way((r.x, r.y))
-        ).astype("Int64")
+        )
+        points_gdf['closest_way_id'] = pd.array(
+            # Handles cases where all values are null.
+            [pd.NA if pd.isna(c) else int(c) for c in closest_way_ids],
+            dtype="Int64",
+        )
         points_gdf = points_gdf.dropna(subset=['closest_way_id'])
 
         # Find streaks of consecutive points having same closest
