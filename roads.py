@@ -26,9 +26,8 @@ class RoadCounter():
         self.ways: gpd.GeoDataFrame | None = None
         self.node_ways: dict | None = None
         self.routes: dict | None = None
+        self.route_parents: dict | None = None
         self.way_routes: dict | None = None
-        self.superroutes: dict | None = None
-        self.route_superroutes: dict | None = None
         self.ways_sindex: gpd.sindex.SpatialIndex | None = None
         self.tracks: gpd.GeoDataFrame | None = None
         self.visited_road_count: int = 0
@@ -63,21 +62,18 @@ class RoadCounter():
 
     def _add_route(self, route_id: int, track_fid: int):
         """Creates a numbered route record."""
-        self.visited_road_count += 1
         route = self.routes[route_id]
-        route_ways = set()
-        if route_id in self.route_superroutes:
-            # Route belongs to a superroute. Get ways from all sibling
-            # routes too.
-            for superroute_id in self.route_superroutes[route_id]:
-                route_ways.update(self._get_superroute_ways(superroute_id))
-        else:
-            # Route does not belong to a superroute.
-            # Just use it as is.
-            route_ways.update(route['ways'])
+
+        # Find highest ancestor route(s) this route belongs to.
+        root_parent_route_ids = self._get_route_parent_roots(route_id)
+
+        # Get ways for all descendant routes.
+        route_ways = self._get_route_child_ways(root_parent_route_ids)
+
+        self.visited_road_count += 1
         self.visited_road_way_ids.update(route_ways)
         mutual_way_ids = self.ways.index.intersection(route_ways)
-        self.visited_road_records.append({
+        record = {
             'visit_order': self.visited_road_count,
             'name': format_numbered_route(route),
             'is_numbered_route': True,
@@ -86,7 +82,8 @@ class RoadCounter():
             'geometry': MultiLineString(
                 self.ways['geometry'].loc[mutual_way_ids].to_list()
             ),
-        })
+        }
+        self.visited_road_records.append(record)
 
     def _collect_segment(self, segment, track_fid):
         """Collects roads for a given driving track segment."""
@@ -168,27 +165,52 @@ class RoadCounter():
             streaks['streak_length'] >= CONFIG['search']['consec_pts']
         ]['closest_way_id'].rename('way_id')
 
-    def _get_superroute_ways(self, superroute_id: int) -> set:
-        """Gets all ways from child routes of a superroute."""
-        sr_ways = set()
-        superroute = self.superroutes[superroute_id]
-        print("superroute", superroute_id, superroute)
-        for route_id in superroute['routes']:
-            route = self.routes.get(route_id)
-            if route is not None:
-                print("route", route_id, format_numbered_route(route))
-                sr_ways.update(route['ways'])
-        return sr_ways
+    def _get_route_child_ways(self, route_ids: set) -> set:
+        """Gets set of ways for all descendant routes."""
+        stack = list(route_ids)
+        checked_route_ids = set()
+        route_ways = set()
+        while stack:
+            current_route_id = stack.pop()
+            if current_route_id in checked_route_ids:
+                continue
+            checked_route_ids.add(current_route_id)
+            current_route = self.routes.get(current_route_id)
+            if current_route is None:
+                continue
+            stack.extend(current_route['child_relations'])
+            route_ways.update(current_route['ways'])
+        return route_ways
+
+    def _get_route_parent_roots(self, route_id) -> set:
+        """Find the highest ancestor superroute(s) for this route."""
+        stack = [route_id]
+        checked_route_ids = set()
+        root_parent_ids = set()
+        while stack:
+            current_route_id = stack.pop()
+            if current_route_id in checked_route_ids:
+                continue
+            checked_route_ids.add(current_route_id)
+            if current_route_id not in self.route_parents:
+                root_parent_ids.add(current_route_id)
+            superroute_ids = self.route_parents[current_route_id]
+            if len(superroute_ids) == 0:
+                root_parent_ids.add(current_route_id)
+            else:
+                stack.extend(superroute_ids)
+        return root_parent_ids
 
     def _load_osm(self):
         """Loads OSM PBF data."""
         osm = load_osm(self.osm_pbf_path)
         self.ways = osm['ways']
         self.node_ways = osm['node_ways']
-        self.routes = osm['numbered_routes']
+        self.routes = osm['routes']
+        self.route_parents = osm['route_parents']
         self.way_routes = osm['way_routes']
-        self.superroutes = osm['superroutes']
-        self.route_superroutes = osm['route_superroutes']
+        # self.superroutes = osm['superroutes']
+        # self.route_superroutes = osm['route_superroutes']
         self.ways_sindex = osm['ways_sindex']
 
     def _load_tracks(self):

@@ -19,10 +19,9 @@ class RoadHandler(osmium.SimpleHandler):
         super().__init__()
         self.rows = []
         self.node_ways = defaultdict(set)
-        self.numbered_routes = {}
+        self.routes = {}
+        self.route_parents = defaultdict(set)
         self.way_routes = defaultdict(set)
-        self.superroutes = {}
-        self.route_superroutes = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
 
     def way(self, w):
@@ -52,28 +51,22 @@ class RoadHandler(osmium.SimpleHandler):
             return
         if tags.get('route') != "road":
             return
-        if tags.get('type') == "superroute":
-            sr_members = [m.ref for m in r.members if m.type == "r"]
-            if len(sr_members) == 0:
-                return
-            self.superroutes[r.id] = {
-                'network': tags.get('network'),
-                'ref': tags.get('ref'),
-                'routes': sr_members,
-            }
-            for sr_member in sr_members:
-                self.route_superroutes[sr_member].add(r.id)
-        elif tags.get('type') == "route":
-            r_members = [m.ref for m in r.members if m.type == "w"]
-            if len(r_members) == 0:
-                return
-            self.numbered_routes[r.id] = {
-                'network': tags.get('network'),
-                'ref': tags.get('ref'),
-                'ways': r_members,
-            }
-            for r_member in r_members:
-                self.way_routes[r_member].add(r.id)
+        if tags.get('type') not in ["route", "superroute"]:
+            return
+        ways = [m.ref for m in r.members if m.type == "w"]
+        child_relations = [m.ref for m in r.members if m.type == "r"]
+        if len(ways) == 0 and len(child_relations) == 0:
+            return
+        self.routes[r.id] = {
+            'network': tags.get('network'),
+            'ref': tags.get('ref'),
+            'child_relations': child_relations,
+            'ways': ways,
+        }
+        for cr in child_relations:
+            self.route_parents[cr].add(r.id)
+        for w in ways:
+            self.way_routes[w].add(r.id)
 
     @property
     def ways(self) -> gpd.GeoDataFrame:
@@ -151,10 +144,12 @@ def _process_osm(osm_data_path) -> dict:
     data = {
         'ways': handler.ways,
         'node_ways': handler.node_ways,
-        'numbered_routes': handler.numbered_routes,
+        'routes': handler.routes,
+        'route_parents': handler.route_parents,
+        # 'numbered_routes': handler.numbered_routes,
         'way_routes': handler.way_routes,
-        'superroutes': handler.superroutes,
-        'route_superroutes': handler.route_superroutes,
+        # 'superroutes': handler.superroutes,
+        # 'route_superroutes': handler.route_superroutes,
         'ways_sindex': handler.ways.sindex, # Build spatial index
     }
     # Cache processed data.
