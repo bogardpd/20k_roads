@@ -64,29 +64,22 @@ class RoadCounter():
     def _add_route(self, route_id: int, track_fid: int):
         """Creates a numbered route record."""
         self.visited_road_count += 1
-        route_all_ways = set()
+        route = self.routes[route_id]
+        route_ways = set()
         if route_id in self.route_superroutes:
-            # Route belongs to a superroute. Get ways
-            # from all sibling routes too.
+            # Route belongs to a superroute. Get ways from all sibling
+            # routes too.
             for superroute_id in self.route_superroutes[route_id]:
-                superroute = self.superroutes[superroute_id]
-                print("superroute", superroute)
-                name = format_numbered_route(superroute)
-                for subroute_id in superroute['routes']:
-                    subroute = self.routes.get(subroute_id)
-                    if subroute is not None:
-                        route_all_ways.update(subroute['ways'])
+                route_ways.update(self._get_superroute_ways(superroute_id))
         else:
             # Route does not belong to a superroute.
             # Just use it as is.
-            route = self.routes[route_id]
-            name = format_numbered_route(route)
-            route_all_ways.update(route['ways'])
-        self.visited_road_way_ids.update(route_all_ways)
-        mutual_way_ids = self.ways.index.intersection(route_all_ways)
+            route_ways.update(route['ways'])
+        self.visited_road_way_ids.update(route_ways)
+        mutual_way_ids = self.ways.index.intersection(route_ways)
         self.visited_road_records.append({
             'visit_order': self.visited_road_count,
-            'name': name,
+            'name': format_numbered_route(route),
             'is_numbered_route': True,
             'track_fid': track_fid,
             'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
@@ -174,6 +167,18 @@ class RoadCounter():
         return streaks[
             streaks['streak_length'] >= CONFIG['search']['consec_pts']
         ]['closest_way_id'].rename('way_id')
+
+    def _get_superroute_ways(self, superroute_id: int) -> set:
+        """Gets all ways from child routes of a superroute."""
+        sr_ways = set()
+        superroute = self.superroutes[superroute_id]
+        print("superroute", superroute_id, superroute)
+        for route_id in superroute['routes']:
+            route = self.routes.get(route_id)
+            if route is not None:
+                print("route", route_id, format_numbered_route(route))
+                sr_ways.update(route['ways'])
+        return sr_ways
 
     def _load_osm(self):
         """Loads OSM PBF data."""
