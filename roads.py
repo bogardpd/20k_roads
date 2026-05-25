@@ -226,7 +226,7 @@ class RoadCounter():
         print("done.")
 
         # Temporarily filter to a small subset of tracks.
-        tracks = tracks[tracks['utc_start'] < "2010-06-19"]
+        tracks = tracks[tracks['utc_start'] < "2012-01-01"]
 
         self.tracks = tracks.to_crs(CONFIG['crs']['metric'])
 
