@@ -5,6 +5,7 @@ import json
 import osmium
 import pandas as pd
 import pickle
+import sys
 import tomllib
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -106,6 +107,12 @@ def load_osm(osm_data_path):
         )
         data = _process_osm(osm_data_path)
     print("done.")
+    if len(data['routes']) == 0 or len(data['way_routes']) == 0:
+        print(
+            "No routes were found. Did you remember to include relations "
+            "in your filter?"
+        )
+        sys.exit(1)
 
     return data
 
