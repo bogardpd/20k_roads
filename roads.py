@@ -260,13 +260,11 @@ class RoadCounter():
 
 def format_numbered_route(route: dict) -> str:
     """Formats a numbered route identifier."""
-    if route['network'] == "US:I":
-        return f"I-{route['ref']}"
-    if route['network'] == "US:US":
-        return f"US-{route['ref']}"
-    match = re.search(r"^US:(?!US)([A-Z]{2})$", route['network'])
-    if match:
-        return f"{match.group(1)}-{route['ref']}"
+    network = route['network'].split(":")
+    if network[0] == "US":
+        if len(network) > 2:
+            return f"{network[1]}-{route['ref']} {network[2]}"
+        return f"{network[1]}-{route['ref']}"
     return f"{route['network']}"
 
 def format_road_name(row: pd.Series) -> str:
