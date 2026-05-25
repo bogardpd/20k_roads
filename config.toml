@@ -61,7 +61,7 @@ networks = [
 
 [crs]
 osm = "EPSG:4326" # WGS-84
-metric = "EPSG:5070" # CONUS Albers Metric
+metric = "EPSG:8857" # WGS 84 / Equal Earth Greenwich (metre)
 output = "EPSG:4326" # WGS-84
 
 [search]
