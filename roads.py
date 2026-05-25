@@ -61,6 +61,40 @@ class RoadCounter():
         print(f"Exported GeoPackage to {gpkg_path}.")
 
 
+    def _add_route(self, route_id: int, track_fid: int):
+        """Creates a numbered route record."""
+        self.visited_road_count += 1
+        route_all_ways = set()
+        if route_id in self.route_superroutes:
+            # Route belongs to a superroute. Get ways
+            # from all sibling routes too.
+            for superroute_id in self.route_superroutes[route_id]:
+                superroute = self.superroutes[superroute_id]
+                print("superroute", superroute)
+                name = format_numbered_route(superroute)
+                for subroute_id in superroute['routes']:
+                    subroute = self.routes.get(subroute_id)
+                    if subroute is not None:
+                        route_all_ways.update(subroute['ways'])
+        else:
+            # Route does not belong to a superroute.
+            # Just use it as is.
+            route = self.routes[route_id]
+            name = format_numbered_route(route)
+            route_all_ways.update(route['ways'])
+        self.visited_road_way_ids.update(route_all_ways)
+        mutual_way_ids = self.ways.index.intersection(route_all_ways)
+        self.visited_road_records.append({
+            'visit_order': self.visited_road_count,
+            'name': name,
+            'is_numbered_route': True,
+            'track_fid': track_fid,
+            'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
+            'geometry': MultiLineString(
+                self.ways['geometry'].loc[mutual_way_ids].to_list()
+            ),
+        })
+
     def _collect_segment(self, segment, track_fid):
         """Collects roads for a given driving track segment."""
         seg_ways = self._get_segment_ways(segment).to_frame()
@@ -71,7 +105,6 @@ class RoadCounter():
         seg_ways = seg_ways.dropna(subset='formatted_name')
         for _, seg_way in seg_ways.iterrows():
             self._trace_road(seg_way, track_fid)
-
 
     def _get_closest_way(self, coords: tuple) -> int:
         """Looks up the closest OSM way to a given coordinate."""
@@ -178,37 +211,7 @@ class RoadCounter():
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
             for r_id in self.way_routes[way.way_id]:
-                self.visited_road_count += 1
-                route_all_ways = set()
-                if r_id in self.route_superroutes:
-                    # Route belongs to a superroute. Get ways
-                    # from all sibling routes too.
-                    for superroute_id in self.route_superroutes[r_id]:
-                        superroute = self.superroutes[superroute_id]
-                        print("superroute", superroute)
-                        name = format_numbered_route(superroute)
-                        for subroute_id in superroute['routes']:
-                            subroute = self.routes.get(subroute_id)
-                            if subroute is not None:
-                                route_all_ways.update(subroute['ways'])
-                else:
-                    # Route does not belong to a superroute.
-                    # Just use it as is.
-                    route = self.routes[r_id]
-                    name = format_numbered_route(route)
-                    route_all_ways.update(route['ways'])
-                self.visited_road_way_ids.update(route_all_ways)
-                mutual_way_ids = self.ways.index.intersection(route_all_ways)
-                self.visited_road_records.append({
-                    'visit_order': self.visited_road_count,
-                    'name': name,
-                    'is_numbered_route': True,
-                    'track_fid': track_fid,
-                    'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
-                    'geometry': MultiLineString(
-                        self.ways['geometry'].loc[mutual_way_ids].to_list()
-                    ),
-                })
+                self._add_route(r_id, track_fid)
         else:
             # Follow ways by road name.
             seg_road_ways = {}
