@@ -27,7 +27,7 @@ class RoadHandler(osmium.SimpleHandler):
 
     def way(self, w):
         """Processing for each way in OSM data."""
-        if 'highway' not in w.tags:
+        if w.tags.get('highway') not in CONFIG['search']['highway_types']:
             return
         try:
             geom = wkb_loads(self._factory.create_linestring(w), hex=True)

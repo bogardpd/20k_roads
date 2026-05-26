@@ -87,6 +87,20 @@ output = "EPSG:4326" # WGS-84
 # Parameters for finding roads.
 max_dist = 50 # Max meters (in metric CRS) to search for nearby road
 consec_pts = 3 # Min number of consecutive points to count as road match
+highway_types = [
+    # Filter for OSM highway tag
+    'motorway',
+    'trunk',
+    'primary',
+    'secondary',
+    'tertiary',
+    'unclassified',
+    'residential',
+    'motorway_link',
+    'trunk_link',
+    'primary_link',
+    'secondary_link',
+]
 
 [output]
 # Output filenames, relative to the --output directory
