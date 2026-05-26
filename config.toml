@@ -1,5 +1,24 @@
 networks = [
     # Networks to include the entire length of as one road.
+    # Australia:
+    "AU",
+    "AU:NSW",
+    "AU:VIC",
+    "AU:WA:NR", "AU:WA:S",
+    # Canada:
+    "CA:transcanada",
+    "CA:BC",
+    "CA:ON:primary", "CA:ON:private_toll", "CA:ON:Toronto:Expressway",
+    # Germany:
+    "BAB", # Autobahn
+    # Iceland:
+    "IS",
+    # New Zealand:
+    "NZ:SH",
+    # Japan:
+    "JP:national", "JP:E",
+    # UK:
+    "UK:motorway",
     # US Interstates:
     "US:I", "US:I:Business", "US:I:Business:Loop", "US:I:Express", "US:I:Express:Toll",
     # US Routes:
