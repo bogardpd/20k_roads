@@ -39,10 +39,16 @@ class RoadCounter():
         print(f"Loading OSM data from {self.osm_pbf_path}. This may take a while.")
         self._load_osm()
         self._load_tracks()
-        for track_fid, track in self.tracks.iterrows():
-            print(f"Processing track {track_fid} ({track.utc_start})")
+        for i, (track_fid, track) in enumerate(self.tracks.iterrows()):
+            print(
+                f"Track {i}/{len(self.tracks)}: "
+                f"fid {track_fid} ({track.utc_start}) "
+                f"{self.visited_road_count} roads found",
+                end=""
+            )
             for segment in track.geometry.geoms:
                 self._collect_segment(segment, track_fid)
+        print()
 
     def export_roads(self):
         """Saves road data to a file."""
@@ -85,7 +91,7 @@ class RoadCounter():
         }
         self.visited_road_records.append(record)
 
-    def _collect_segment(self, segment, track_fid):
+    def _collect_segment(self, segment: LineString, track_fid: int):
         """Collects roads for a given driving track segment."""
         seg_ways = self._get_segment_ways(segment).to_frame()
         seg_ways = seg_ways.join(
