@@ -32,6 +32,7 @@ class RoadCounter():
         self.tracks: gpd.GeoDataFrame | None = None
         self.visited_road_count: int = 0
         self.visited_road_way_ids: set = set()
+        self.visited_route_rel_ids: set = set()
         self.visited_road_records: list = []
 
     def collect_roads(self):
@@ -79,6 +80,7 @@ class RoadCounter():
 
         self.visited_road_count += 1
         self.visited_road_way_ids.update(route_ways)
+        self.visited_route_rel_ids.add(route_id)
         mutual_way_ids = self.ways.index.intersection(route_ways)
         record = {
             'visit_order': self.visited_road_count,
@@ -99,7 +101,7 @@ class RoadCounter():
             self.ways[['road_name', 'route_ref', 'formatted_name']],
             on='way_id',
         )
-        seg_ways = seg_ways.dropna(subset='formatted_name')
+        # seg_ways = seg_ways.dropna(subset='formatted_name')
         for _, seg_way in seg_ways.iterrows():
             self._trace_road(seg_way, track_fid)
 
@@ -184,6 +186,7 @@ class RoadCounter():
         route_ways = set()
         while stack:
             current_route_id = stack.pop()
+            self.visited_route_rel_ids.add(current_route_id)
             if current_route_id in checked_route_ids:
                 continue
             checked_route_ids.add(current_route_id)
@@ -240,15 +243,20 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
-        if way.way_id in self.visited_road_way_ids:
-            return
+        # if way.way_id in self.visited_road_way_ids:
+        #     return
         if way.way_id in self.way_routes:
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
             for r_id in self.way_routes[way.way_id]:
-                self._add_route(r_id, track_fid)
-        else:
-            # Follow ways by road name.
+                if r_id not in self.visited_route_rel_ids:
+                    self._add_route(r_id, track_fid)
+        if (
+            way.way_id not in self.visited_road_way_ids
+            and way.road_name is not None
+        ):
+            # This way is part of a named road. Follow ways by road
+            # name.
             seg_road_ways = {}
             self._get_named_road_way_ids(
                 seg_road_ways,
@@ -258,7 +266,7 @@ class RoadCounter():
             self.visited_road_count += 1
             self.visited_road_records.append({
                 'visit_order': self.visited_road_count,
-                'name': way.formatted_name,
+                'name': way.road_name,
                 'is_numbered_route': False,
                 'track_fid': track_fid,
                 'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
