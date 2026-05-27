@@ -44,7 +44,8 @@ class RoadCounter():
                 f"Track {i}/{len(self.tracks)}: "
                 f"fid {track_fid} ({track.utc_start}) "
                 f"{self.visited_road_count} roads found",
-                end=""
+                end="    \r",
+                flush=True,
             )
             for segment in track.geometry.geoms:
                 self._collect_segment(segment, track_fid)
