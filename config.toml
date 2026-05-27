@@ -20,7 +20,7 @@ networks = [
     # UK:
     "UK:motorway",
     # US Interstates:
-    "US:I", "US:I:Business", "US:I:Business:Loop", "US:I:Express", "US:I:Express:Toll",
+    "US:I", "US:I:Business", "US:I:Business:Loop", "US:I:Express", "US:I:Express:Toll", "US:I:Spur", "US:I:Truck",
     # US Routes:
     "US:US", "US:US:Business", "US:US:Express",
     # US State Routes:
@@ -28,8 +28,8 @@ networks = [
     "US:AK",
     "US:AR",
     "US:AZ",
-    "US:CA",
-    "US:CO",
+    "US:CA", "US:CA:Business", "US:CA:Express", "US:CA:Truck",
+    "US:CO", "US:CO:E470",
     "US:CT",
     "US:DC",
     "US:DE",
@@ -57,7 +57,7 @@ networks = [
     "US:NJ",
     "US:NV",
     "US:NM",
-    "US:NY",
+    "US:NY", "US:NY:Parkway",
     "US:ND",
     "US:OH", "US:OH:Bypass", "US:OH:Truck",
     "US:OK",
@@ -68,7 +68,7 @@ networks = [
     "US:SC",
     "US:SD",
     "US:TN",
-    "US:TX", "US:TX:Express:Toll", "US:TX:FM", "US:TX:Loop", "US:TX:Loop:Express:Toll", "US:TX:Spur",
+    "US:TX", "US:TX:CTRMA:Express", "US:TX:Express:Toll", "US:TX:FM", "US:TX:Loop", "US:TX:Loop:Express:Toll", "US:TX:Spur",
     "US:UT",
     "US:VA", "US:VA:Secondary",
     "US:VT",
