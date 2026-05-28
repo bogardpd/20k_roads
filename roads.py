@@ -2,10 +2,10 @@
 import argparse
 import geopandas as gpd
 import pandas as pd
-import re
 import tomllib
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
+from tqdm import tqdm
 
 from osm import load_osm
 
@@ -37,20 +37,17 @@ class RoadCounter():
 
     def collect_roads(self):
         """Builds a collection of traveled roads."""
-        print(f"Loading OSM data from {self.osm_pbf_path}. This may take a while.")
+        print(
+            f"Loading OSM data from {self.osm_pbf_path}. This may take a "
+            "while."
+        )
         self._load_osm()
         self._load_tracks()
-        for i, (track_fid, track) in enumerate(self.tracks.iterrows()):
-            print(
-                f"Track {i}/{len(self.tracks)}: "
-                f"fid {track_fid} ({track.utc_start}) "
-                f"{self.visited_road_count} roads found",
-                end="    \r",
-                flush=True,
-            )
-            for segment in track.geometry.geoms:
-                self._collect_segment(segment, track_fid)
-        print()
+        with tqdm(self.tracks.iterrows(), total=len(self.tracks)) as prog_bar:
+            for track_fid, track in prog_bar:
+                for segment in track.geometry.geoms:
+                    self._collect_segment(segment, track_fid)
+                prog_bar.set_postfix(roads=self.visited_road_count)
 
     def export_roads(self):
         """Saves road data to a file."""
@@ -253,7 +250,7 @@ class RoadCounter():
                     self._add_route(r_id, track_fid)
         if (
             way.way_id not in self.visited_road_way_ids
-            and way.road_name is not None
+            and pd.notna(way.road_name)
         ):
             # This way is part of a named road. Follow ways by road
             # name.
