@@ -243,16 +243,15 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
-        has_valid_route = False
-        if way.way_id in self.way_routes:
-            has_valid_route = True
+        has_valid_routes = (way.way_id in self.way_routes)
+        if has_valid_routes:
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
             for r_id in self.way_routes[way.way_id]:
                 if r_id not in self.visited_route_rel_ids:
                     self._add_route(r_id, track_fid)
         if way.way_id not in self.visited_road_way_ids:
-            if pd.na(way.name) and has_valid_route:
+            if pd.isna(way.name) and has_valid_routes:
                 # Way doesn't have an explicit name, and its routes
                 # have already been handled.
                 return
