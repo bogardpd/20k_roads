@@ -55,7 +55,7 @@ networks = [
     "US:NE",
     "US:NH",
     "US:NJ",
-    "US:NV",
+    "US:NV", "US:NV:Clark",
     "US:NM",
     "US:NY", "US:NY:Parkway",
     "US:ND",

@@ -43,6 +43,7 @@ class RoadCounter():
         )
         self._load_osm()
         self._load_tracks()
+        print("Processing tracks...")
         with tqdm(
             self.tracks.iterrows(),
             total=len(self.tracks),
@@ -55,7 +56,6 @@ class RoadCounter():
 
     def export_roads(self):
         """Saves road data to a file."""
-
         if len(self.visited_road_records) == 0:
             print("No roads found.")
             return
@@ -80,7 +80,6 @@ class RoadCounter():
         route_ways = self._get_route_child_ways(root_parent_route_ids)
 
         self.visited_road_count += 1
-        self.visited_road_way_ids.update(route_ways)
         self.visited_route_rel_ids.add(route_id)
         mutual_way_ids = self.ways.index.intersection(route_ways)
         record = {
@@ -137,7 +136,7 @@ class RoadCounter():
                     if adj_way_id in seg_road_ways:
                         continue
                     adj_way = self.ways.loc[adj_way_id]
-                    if adj_way.road_name == road_name:
+                    if adj_way.formatted_name == road_name:
                         stack.append(adj_way_id)
 
     def _get_segment_ways(self, segment: LineString) -> pd.Series:
@@ -244,8 +243,6 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
-        # if way.way_id in self.visited_road_way_ids:
-        #     return
         if way.way_id in self.way_routes:
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
@@ -254,7 +251,7 @@ class RoadCounter():
                     self._add_route(r_id, track_fid)
         if (
             way.way_id not in self.visited_road_way_ids
-            and pd.notna(way.road_name)
+            and pd.notna(way.formatted_name)
         ):
             # This way is part of a named road. Follow ways by road
             # name.
@@ -262,12 +259,12 @@ class RoadCounter():
             self._get_named_road_way_ids(
                 seg_road_ways,
                 way.way_id,
-                way.road_name,
+                way.formatted_name,
             )
             self.visited_road_count += 1
             self.visited_road_records.append({
                 'visit_order': self.visited_road_count,
-                'name': way.road_name,
+                'name': way.formatted_name,
                 'is_numbered_route': False,
                 'track_fid': track_fid,
                 'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
@@ -283,12 +280,6 @@ def format_numbered_route(route: dict) -> str:
             return f"{network[1]}-{route['ref']} {" ".join(network[2:])}"
         return f"{network[1]}-{route['ref']}"
     return f"{route['network']}"
-
-def format_road_name(row: pd.Series) -> str:
-    """Formats a road name for an OSM way."""
-    if pd.isna(row.route_ref):
-        return row.road_name
-    return row.route_ref
 
 
 if __name__ == "__main__":
