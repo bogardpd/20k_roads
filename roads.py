@@ -243,33 +243,37 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
+        has_valid_route = False
         if way.way_id in self.way_routes:
+            has_valid_route = True
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
             for r_id in self.way_routes[way.way_id]:
                 if r_id not in self.visited_route_rel_ids:
                     self._add_route(r_id, track_fid)
-        if (
-            way.way_id not in self.visited_road_way_ids
-            and pd.notna(way.formatted_name)
-        ):
-            # This way is part of a named road. Follow ways by road
-            # name.
-            seg_road_ways = {}
-            self._get_named_road_way_ids(
-                seg_road_ways,
-                way.way_id,
-                way.formatted_name,
-            )
-            self.visited_road_count += 1
-            self.visited_road_records.append({
-                'visit_order': self.visited_road_count,
-                'name': way.formatted_name,
-                'is_numbered_route': False,
-                'track_fid': track_fid,
-                'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
-                'geometry': MultiLineString(seg_road_ways.values()),
-            })
+        if way.way_id not in self.visited_road_way_ids:
+            if pd.na(way.name) and has_valid_route:
+                # Way doesn't have an explicit name, and its routes
+                # have already been handled.
+                return
+            if pd.notna(way.formatted_name):
+                # This way is part of a named road. Follow ways by road
+                # name.
+                seg_road_ways = {}
+                self._get_named_road_way_ids(
+                    seg_road_ways,
+                    way.way_id,
+                    way.formatted_name,
+                )
+                self.visited_road_count += 1
+                self.visited_road_records.append({
+                    'visit_order': self.visited_road_count,
+                    'name': way.formatted_name,
+                    'is_numbered_route': False,
+                    'track_fid': track_fid,
+                    'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
+                    'geometry': MultiLineString(seg_road_ways.values()),
+                })
 
 
 def format_numbered_route(route: dict) -> str:
