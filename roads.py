@@ -88,6 +88,8 @@ class RoadCounter():
             'is_numbered_route': True,
             'track_fid': track_fid,
             'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
+            'origin_way': None,
+            'origin_rel': route_id,
             'geometry': MultiLineString(
                 self.ways['geometry'].loc[mutual_way_ids].to_list()
             ),
@@ -224,8 +226,6 @@ class RoadCounter():
         self.routes = osm['routes']
         self.route_parents = osm['route_parents']
         self.way_routes = osm['way_routes']
-        # self.superroutes = osm['superroutes']
-        # self.route_superroutes = osm['route_superroutes']
         self.ways_sindex = osm['ways_sindex']
 
     def _load_tracks(self):
@@ -243,7 +243,7 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
-        has_valid_routes = (way.way_id in self.way_routes)
+        has_valid_routes = way.way_id in self.way_routes
         if has_valid_routes:
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
@@ -271,6 +271,8 @@ class RoadCounter():
                     'is_numbered_route': False,
                     'track_fid': track_fid,
                     'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
+                    'origin_way': way.way_id,
+                    'origin_rel': None,
                     'geometry': MultiLineString(seg_road_ways.values()),
                 })
 
