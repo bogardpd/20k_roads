@@ -43,7 +43,11 @@ class RoadCounter():
         )
         self._load_osm()
         self._load_tracks()
-        with tqdm(self.tracks.iterrows(), total=len(self.tracks)) as prog_bar:
+        with tqdm(
+            self.tracks.iterrows(),
+            total=len(self.tracks),
+            ascii=True,
+        ) as prog_bar:
             for track_fid, track in prog_bar:
                 for segment in track.geometry.geoms:
                     self._collect_segment(segment, track_fid)
