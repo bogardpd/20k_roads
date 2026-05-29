@@ -95,7 +95,7 @@ class RoadCounter():
             ),
         }
         self.visited_road_records.append(record)
-        return mutual_way_ids
+        return set(mutual_way_ids)
 
     def _collect_segment(self, segment: LineString, track_fid: int):
         """Collects roads for a given driving track segment."""
@@ -268,11 +268,14 @@ class RoadCounter():
                 way.way_id,
                 way.road_name,
             )
-            seg_road_way_ids = set(seg_road_ways.keys())
-            for route_way_set in route_way_sets:
-                if seg_road_way_ids.issubset(route_way_set):
-                    # This named road entirely belongs to a route
-                    # we already traced, so ignore it.
+            named_road_way_ids = set(seg_road_ways.keys())
+            for route_way_ids in route_way_sets:
+                if (
+                    len(named_road_way_ids - route_way_ids)
+                    < 0.05 * len(named_road_way_ids)
+                ):
+                    # The vast majority of this named road belongs to a
+                    # route we checked, so ignore it.
                     return
             self.visited_road_count += 1
             self.visited_road_records.append({
