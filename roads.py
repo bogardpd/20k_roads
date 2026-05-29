@@ -269,7 +269,13 @@ class RoadCounter():
                 # Get route ref and geometry:
                 route_refs.append(self.routes[r_id]['ref'])
                 for root in (self._get_route_parent_roots(r_id)):
-                    route_way_sets.append(self.root_route_way_ids[root])
+                    try:
+                        route_way_sets.append(self.root_route_way_ids[root])
+                    except KeyError:
+                        print(
+                            f"Relation {root} not found in root_route_way_ids."
+                        )
+                        print(way)
         if way.way_id not in self.visited_road_way_ids:
             # Follow named road ways by name.
             if pd.isna(way.road_name):
