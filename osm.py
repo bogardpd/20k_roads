@@ -78,6 +78,8 @@ class RoadHandler(osmium.SimpleHandler):
             self.rows,
             crs=CONFIG['crs']['osm'],
         ).set_index('id')
+        ways['road_name'] = ways['road_name'].astype("string")
+        ways['route_ref'] = ways['route_ref'].astype("string")
         ways['formatted_name'] = ways.apply(format_road_name, axis=1)
         return ways.to_crs(CONFIG['crs']['metric'])
 

@@ -69,7 +69,7 @@ class RoadCounter():
         print(f"Exported GeoPackage to {gpkg_path}.")
 
 
-    def _add_route(self, route_id: int, track_fid: int):
+    def _add_route(self, route_id: int, track_fid: int) -> set:
         """Creates a numbered route record."""
         route = self.routes[route_id]
 
@@ -95,6 +95,7 @@ class RoadCounter():
             ),
         }
         self.visited_road_records.append(record)
+        return mutual_way_ids
 
     def _collect_segment(self, segment: LineString, track_fid: int):
         """Collects roads for a given driving track segment."""
@@ -245,37 +246,45 @@ class RoadCounter():
         """Creates a road record starting with a given way."""
         has_valid_routes = way.way_id in self.way_routes
         route_refs = []
+        route_way_sets = []
         if has_valid_routes:
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
             for r_id in self.way_routes[way.way_id]:
                 if r_id not in self.visited_route_rel_ids:
-                    self._add_route(r_id, track_fid)
+                    route_ways = self._add_route(r_id, track_fid)
+                    route_way_sets.append(route_ways)
                     route_refs.append(self.routes[r_id]['ref'])
         if way.way_id not in self.visited_road_way_ids:
-            if pd.isna(way.name):
-                # This way is part of a named road. Follow ways by road
-                # name.
-                if any(str(ref) in way.name for ref in route_refs):
-                    # Name matches a numbered route we're already using.
+            # Follow named road ways by name.
+            if pd.isna(way.road_name):
+                return
+            if any(ref in way.road_name for ref in route_refs):
+                # Name matches a numbered route we're already using.
+                return
+            seg_road_ways = {}
+            self._get_named_road_way_ids(
+                seg_road_ways,
+                way.way_id,
+                way.road_name,
+            )
+            seg_road_way_ids = set(seg_road_ways.keys())
+            for route_way_set in route_way_sets:
+                if seg_road_way_ids.issubset(route_way_set):
+                    # This named road entirely belongs to a route
+                    # we already traced, so ignore it.
                     return
-                seg_road_ways = {}
-                self._get_named_road_way_ids(
-                    seg_road_ways,
-                    way.way_id,
-                    way.name,
-                )
-                self.visited_road_count += 1
-                self.visited_road_records.append({
-                    'visit_order': self.visited_road_count,
-                    'name': way.name,
-                    'is_numbered_route': False,
-                    'track_fid': track_fid,
-                    'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
-                    'origin_way': way.way_id,
-                    'origin_rel': None,
-                    'geometry': MultiLineString(seg_road_ways.values()),
-                })
+            self.visited_road_count += 1
+            self.visited_road_records.append({
+                'visit_order': self.visited_road_count,
+                'name': way.road_name,
+                'is_numbered_route': False,
+                'track_fid': track_fid,
+                'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
+                'origin_way': way.way_id,
+                'origin_rel': None,
+                'geometry': MultiLineString(seg_road_ways.values()),
+            })
 
 
 def format_numbered_route(route: dict) -> str:
