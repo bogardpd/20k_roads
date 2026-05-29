@@ -76,12 +76,19 @@ class RoadCounter():
 
         # Find highest ancestor route(s) this route belongs to.
         root_parent_route_ids = self._get_route_parent_roots(route_id)
-
+        if (root_parent_route_ids == {12724795, 112245}):
+            print("route_id", route_id)
+            print("track_fid", track_fid)
         # Get ways for all descendant routes.
         route_ways = self._get_route_child_ways(root_parent_route_ids)
 
         self.visited_road_count += 1
         self.visited_route_rel_ids.add(route_id)
+        if route_id == 7451508:
+            print("Added 7451508 from _add_route()")
+            print("route_id", route_id)
+            print("track_fid", track_fid)
+            quit()
         mutual_way_ids = self.ways.index.intersection(route_ways)
         record = {
             'visit_order': self.visited_road_count,
@@ -184,23 +191,27 @@ class RoadCounter():
             streaks['streak_length'] >= CONFIG['search']['consec_pts']
         ]['closest_way_id'].rename('way_id')
 
-    def _get_route_child_ways(self, route_ids: set) -> set:
+    def _get_route_child_ways(self, root_route_ids: set) -> set:
         """Gets set of ways for all descendant routes."""
-        stack = list(route_ids)
         checked_route_ids = set()
-        route_ways = set()
-        while stack:
-            current_route_id = stack.pop()
-            self.visited_route_rel_ids.add(current_route_id)
-            if current_route_id in checked_route_ids:
-                continue
-            checked_route_ids.add(current_route_id)
-            current_route = self.routes.get(current_route_id)
-            if current_route is None:
-                continue
-            stack.extend(current_route['child_relations'])
-            route_ways.update(current_route['ways'])
-        return route_ways
+        all_root_ways = set()
+        for root_route_id in root_route_ids:
+            stack = [root_route_id]
+            root_ways = set()
+            while stack:
+                current_route_id = stack.pop()
+                self.visited_route_rel_ids.add(current_route_id)
+                if current_route_id in checked_route_ids:
+                    continue
+                checked_route_ids.add(current_route_id)
+                current_route = self.routes.get(current_route_id)
+                if current_route is None:
+                    continue
+                stack.extend(current_route['child_relations'])
+                root_ways.update(current_route['ways'])
+            self.root_route_way_ids[root_route_id] = root_ways
+            all_root_ways.update(root_ways)
+        return all_root_ways
 
     def _get_route_parent_roots(self, route_id) -> set:
         """Find the highest ancestor superroute(s) for this route."""
@@ -257,11 +268,8 @@ class RoadCounter():
                     self._add_route(r_id, track_fid)
                 # Get route ref and geometry:
                 route_refs.append(self.routes[r_id]['ref'])
-                route_way_sets.append(
-                    self.root_route_way_ids[
-                        frozenset(self._get_route_parent_roots(r_id))
-                    ]
-                )
+                for root in (self._get_route_parent_roots(r_id)):
+                    route_way_sets.append(self.root_route_way_ids[root])
         if way.way_id not in self.visited_road_way_ids:
             # Follow named road ways by name.
             if pd.isna(way.road_name):
