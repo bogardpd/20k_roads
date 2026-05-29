@@ -101,6 +101,7 @@ highway_types = [
     'primary_link',
     'secondary_link',
 ]
+distinctness_ratio = 0.05 # Fraction of ways of a named road that must be distinct from an overlapping route to keep the road
 
 [output]
 # Output filenames, relative to the --output directory

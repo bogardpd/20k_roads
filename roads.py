@@ -30,6 +30,7 @@ class RoadCounter():
         self.way_routes: dict | None = None
         self.ways_sindex: gpd.sindex.SpatialIndex | None = None
         self.tracks: gpd.GeoDataFrame | None = None
+        self.root_route_way_ids: dict = {}
         self.visited_road_count: int = 0
         self.visited_road_way_ids: set = set()
         self.visited_route_rel_ids: set = set()
@@ -69,7 +70,7 @@ class RoadCounter():
         print(f"Exported GeoPackage to {gpkg_path}.")
 
 
-    def _add_route(self, route_id: int, track_fid: int) -> set:
+    def _add_route(self, route_id: int, track_fid: int):
         """Creates a numbered route record."""
         route = self.routes[route_id]
 
@@ -95,7 +96,9 @@ class RoadCounter():
             ),
         }
         self.visited_road_records.append(record)
-        return set(mutual_way_ids)
+        self.root_route_way_ids[
+            frozenset(root_parent_route_ids)
+        ] = set(mutual_way_ids)
 
     def _collect_segment(self, segment: LineString, track_fid: int):
         """Collects roads for a given driving track segment."""
@@ -104,7 +107,6 @@ class RoadCounter():
             self.ways[['road_name', 'route_ref', 'formatted_name']],
             on='way_id',
         )
-        # seg_ways = seg_ways.dropna(subset='formatted_name')
         for _, seg_way in seg_ways.iterrows():
             self._trace_road(seg_way, track_fid)
 
@@ -252,9 +254,14 @@ class RoadCounter():
             # Get associated ways from relations index.
             for r_id in self.way_routes[way.way_id]:
                 if r_id not in self.visited_route_rel_ids:
-                    route_ways = self._add_route(r_id, track_fid)
-                    route_way_sets.append(route_ways)
-                    route_refs.append(self.routes[r_id]['ref'])
+                    self._add_route(r_id, track_fid)
+                # Get route ref and geometry:
+                route_refs.append(self.routes[r_id]['ref'])
+                route_way_sets.append(
+                    self.root_route_way_ids[
+                        frozenset(self._get_route_parent_roots(r_id))
+                    ]
+                )
         if way.way_id not in self.visited_road_way_ids:
             # Follow named road ways by name.
             if pd.isna(way.road_name):
@@ -270,12 +277,12 @@ class RoadCounter():
             )
             named_road_way_ids = set(seg_road_ways.keys())
             for route_way_ids in route_way_sets:
-                if (
-                    len(named_road_way_ids - route_way_ids)
-                    < 0.05 * len(named_road_way_ids)
-                ):
-                    # The vast majority of this named road belongs to a
-                    # route we checked, so ignore it.
+                road_way_count = len(named_road_way_ids)
+                unique_way_count = len(named_road_way_ids - route_way_ids)
+                ratio = unique_way_count/road_way_count
+                if ratio < CONFIG['search']['distinctness_ratio']:
+                    # Named road does not have enough ways distinct from
+                    # the concurrent route.
                     return
             self.visited_road_count += 1
             self.visited_road_records.append({
