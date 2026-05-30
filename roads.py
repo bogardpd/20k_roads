@@ -74,17 +74,15 @@ class RoadCounter():
 
     def _add_route(self, rel_id: int, track_fid: int):
         """Creates a numbered route record."""
-        route = self._get_route_ids(rel_id)
         route_id = self._route_inc
         self._route_inc += 1
+        route_way_ids = self._get_route_way_ids(rel_id, route_id)
         self.routes[route_id] = {
-            'way_ids': route['way_ids']
+            'way_ids': route_way_ids
         }
-        for r in route['rel_ids']:
-            self.rel_routes[r] = route_id
         self.rel_routes[rel_id] = route_id
         self.visited_road_count += 1
-        mutual_way_ids = self.ways.index.intersection(route['way_ids'])
+        mutual_way_ids = self.ways.index.intersection(route_way_ids)
         record = {
             'visit_order': self.visited_road_count,
             'name': format_numbered_route(self.rels[rel_id]),
@@ -186,11 +184,10 @@ class RoadCounter():
             streaks['streak_length'] >= CONFIG['search']['consec_pts']
         ]['closest_way_id'].rename('way_id')
 
-    def _get_route_ids(self, rel_id) -> dict:
+    def _get_route_way_ids(self, rel_id: int, route_id: int) -> set:
         """Gets relations and ways for a route from a given rel_id."""
         stack = [rel_id]
         checked_rel_ids = set()
-        route_rel_ids = set()
         route_way_ids = set()
         rel = self.rels[rel_id]
         ref = rel['ref']
@@ -206,7 +203,7 @@ class RoadCounter():
             if cur_rel['ref'] != ref or cur_rel['network'] != network:
                 continue
             # Store rel and way ids.
-            route_rel_ids.add(cur_rel_id)
+            self.rel_routes[cur_rel_id] = route_id
             route_way_ids.update(cur_rel['ways'])
             # Find parents and children to check.
             parents = self.rel_parents.get(cur_rel_id)
@@ -215,7 +212,7 @@ class RoadCounter():
             children = cur_rel['child_relations']
             if children is not None:
                 stack.extend(children)
-        return {'rel_ids': route_rel_ids, 'way_ids': route_way_ids}
+        return route_way_ids
 
     def _load_osm(self):
         """Loads OSM PBF data."""
