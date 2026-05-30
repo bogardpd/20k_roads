@@ -35,3 +35,13 @@ osmium tags-filter region-latest.osm.pbf \
   r/type=superroute,route=road \
   -o region-roads-drivable.osm.pbf
 ```
+
+## Lexicon
+
+As this project uses [OpenStreetMap](https://www.openstreetmap.org/) data, it uses OSM's basic data structures of **nodes** (points at a specific geographic location), **ways** (sequences of nodes forming a line), and **relations** (collections of nodes, ways, and other relations which represent a map feature).
+
+For the purposes of this project, a **road** is a continuous drivable collection of ways which has a single identity for its length. These are divided into two types:
+
+- A **numbered route** is a road like an Interstate (I-80), US Route (US-1), or State Route (OH-4) which belongs to a network of similar roads and is identified primarily by number. (This does not include roads like 1st Street or 5th Avenue; even though they are numbered, they doesn't belong to a network.) Numbered routes are represented by OSM relations that include a `network` and `ref` tag, and the specific networks this project will use are defined in `config.toml`.
+- A **named road** is a road that is known primarily by name. These are made up of adjacent ways whose `name` tags are the same.
+
