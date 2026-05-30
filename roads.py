@@ -25,15 +25,17 @@ class RoadCounter():
         self.output_dir: Path = output_dir
         self.ways: gpd.GeoDataFrame | None = None
         self.node_ways: dict | None = None
-        self.routes: dict | None = None
+        self.rels: dict | None = None
         self.rel_parents: dict | None = None
+        self.rel_routes: dict = {}
         self.way_rels: dict | None = None
         self.ways_sindex: gpd.sindex.SpatialIndex | None = None
         self.tracks: gpd.GeoDataFrame | None = None
+        self.routes: dict = {}
+        self._route_inc: int = 0
         self.root_route_way_ids: dict = {}
         self.visited_road_count: int = 0
         self.visited_road_way_ids: set = set()
-        self.visited_route_rel_ids: set = set()
         self.visited_road_records: list = []
 
     def collect_roads(self):
@@ -70,42 +72,33 @@ class RoadCounter():
         print(f"Exported GeoPackage to {gpkg_path}.")
 
 
-    def _add_route(self, route_id: int, track_fid: int):
+    def _add_route(self, rel_id: int, track_fid: int):
         """Creates a numbered route record."""
-        route = self.routes[route_id]
-
-        # Find highest ancestor route(s) this route belongs to.
-        root_parent_route_ids = self._get_route_parent_roots(route_id)
-        if (root_parent_route_ids == {12724795, 112245}):
-            print("route_id", route_id)
-            print("track_fid", track_fid)
-        # Get ways for all descendant routes.
-        route_ways = self._get_route_child_ways(root_parent_route_ids)
-
+        route = self._get_route_ids(rel_id)
+        route_id = self._route_inc
+        self._route_inc += 1
+        self.routes[route_id] = {
+            'way_ids': route['way_ids']
+        }
+        for r in route['rel_ids']:
+            self.rel_routes[r] = route_id
+        self.rel_routes[rel_id] = route_id
         self.visited_road_count += 1
-        self.visited_route_rel_ids.add(route_id)
-        if route_id == 7451508:
-            print("Added 7451508 from _add_route()")
-            print("route_id", route_id)
-            print("track_fid", track_fid)
-            quit()
-        mutual_way_ids = self.ways.index.intersection(route_ways)
+        mutual_way_ids = self.ways.index.intersection(route['way_ids'])
         record = {
             'visit_order': self.visited_road_count,
-            'name': format_numbered_route(route),
+            'name': format_numbered_route(self.rels[rel_id]),
             'is_numbered_route': True,
             'track_fid': track_fid,
             'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
             'origin_way': None,
-            'origin_rel': route_id,
+            'origin_rel': rel_id,
             'geometry': MultiLineString(
                 self.ways['geometry'].loc[mutual_way_ids].to_list()
             ),
         }
         self.visited_road_records.append(record)
-        self.root_route_way_ids[
-            frozenset(root_parent_route_ids)
-        ] = set(mutual_way_ids)
+        return route_id
 
     def _collect_segment(self, segment: LineString, track_fid: int):
         """Collects roads for a given driving track segment."""
@@ -148,7 +141,9 @@ class RoadCounter():
                     if adj_way_id in seg_road_ways:
                         continue
                     adj_way = self.ways.loc[adj_way_id]
-                    if adj_way.formatted_name == road_name:
+                    if pd.isna(adj_way.road_name):
+                        continue
+                    if adj_way.road_name == road_name:
                         stack.append(adj_way_id)
 
     def _get_segment_ways(self, segment: LineString) -> pd.Series:
@@ -191,53 +186,43 @@ class RoadCounter():
             streaks['streak_length'] >= CONFIG['search']['consec_pts']
         ]['closest_way_id'].rename('way_id')
 
-    def _get_route_child_ways(self, root_route_ids: set) -> set:
-        """Gets set of ways for all descendant routes."""
-        checked_route_ids = set()
-        all_root_ways = set()
-        for root_route_id in root_route_ids:
-            stack = [root_route_id]
-            root_ways = set()
-            while stack:
-                current_route_id = stack.pop()
-                self.visited_route_rel_ids.add(current_route_id)
-                if current_route_id in checked_route_ids:
-                    continue
-                checked_route_ids.add(current_route_id)
-                current_route = self.routes.get(current_route_id)
-                if current_route is None:
-                    continue
-                stack.extend(current_route['child_relations'])
-                root_ways.update(current_route['ways'])
-            self.root_route_way_ids[root_route_id] = root_ways
-            all_root_ways.update(root_ways)
-        return all_root_ways
-
-    def _get_route_parent_roots(self, route_id) -> set:
-        """Find the highest ancestor superroute(s) for this route."""
-        stack = [route_id]
-        checked_route_ids = set()
-        root_parent_ids = set()
+    def _get_route_ids(self, rel_id) -> dict:
+        """Gets relations and ways for a route from a given rel_id."""
+        stack = [rel_id]
+        checked_rel_ids = set()
+        route_rel_ids = set()
+        route_way_ids = set()
+        rel = self.rels[rel_id]
+        ref = rel['ref']
+        network = rel['network']
         while stack:
-            current_route_id = stack.pop()
-            if current_route_id in checked_route_ids:
+            cur_rel_id = stack.pop()
+            if cur_rel_id in checked_rel_ids:
                 continue
-            checked_route_ids.add(current_route_id)
-            if current_route_id not in self.rel_parents:
-                root_parent_ids.add(current_route_id)
-            superroute_ids = self.rel_parents[current_route_id]
-            if len(superroute_ids) == 0:
-                root_parent_ids.add(current_route_id)
-            else:
-                stack.extend(superroute_ids)
-        return root_parent_ids
+            checked_rel_ids.add(cur_rel_id)
+            cur_rel = self.rels.get(cur_rel_id)
+            if cur_rel is None:
+                continue
+            if cur_rel['ref'] != ref or cur_rel['network'] != network:
+                continue
+            # Store rel and way ids.
+            route_rel_ids.add(cur_rel_id)
+            route_way_ids.update(cur_rel['ways'])
+            # Find parents and children to check.
+            parents = self.rel_parents.get(cur_rel_id)
+            if parents is not None:
+                stack.extend(parents)
+            children = cur_rel['child_relations']
+            if children is not None:
+                stack.extend(children)
+        return {'rel_ids': route_rel_ids, 'way_ids': route_way_ids}
 
     def _load_osm(self):
         """Loads OSM PBF data."""
         osm = load_osm(self.osm_pbf_path)
         self.ways = osm['ways']
         self.node_ways = osm['node_ways']
-        self.routes = osm['routes']
+        self.rels = osm['routes']
         self.rel_parents = osm['rel_parents']
         self.way_rels = osm['way_rels']
         self.ways_sindex = osm['ways_sindex']
@@ -257,27 +242,24 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
-        has_valid_routes = way.way_id in self.way_rels
+        has_valid_rels = way.way_id in self.way_rels
         route_refs = []
         route_way_sets = []
-        if has_valid_routes:
-            # This way is part of at least one numbered route.
-            # Get associated ways from relations index.
-            for r_id in self.way_rels[way.way_id]:
-                if r_id not in self.visited_route_rel_ids:
-                    self._add_route(r_id, track_fid)
+
+        # Find numbered routes.
+        if has_valid_rels:
+            # This way is part of at least one valid relation. Build
+            # numbered routes from relations.
+            for rel_id in self.way_rels[way.way_id]:
+                if rel_id not in self.rel_routes:
+                    self._add_route(rel_id, track_fid)
                 # Get route ref and geometry:
-                route_refs.append(self.routes[r_id]['ref'])
-                for root in (self._get_route_parent_roots(r_id)):
-                    try:
-                        route_way_sets.append(self.root_route_way_ids[root])
-                    except KeyError:
-                        print(
-                            f"Relation {root} not found in root_route_way_ids."
-                        )
-                        print(way)
+                route_refs.append(self.rels[rel_id]['ref'])
+                route = self.routes[self.rel_routes[rel_id]]
+                route_way_sets.append(route['way_ids'])
+
+        # Find named road.
         if way.way_id not in self.visited_road_way_ids:
-            # Follow named road ways by name.
             if pd.isna(way.road_name):
                 return
             if any(ref in way.road_name for ref in route_refs):
@@ -289,15 +271,16 @@ class RoadCounter():
                 way.way_id,
                 way.road_name,
             )
+            # Check that named road is distinct enough from any numbered
+            # routes sharing the same way.
             named_road_way_ids = set(seg_road_ways.keys())
             for route_way_ids in route_way_sets:
                 road_way_count = len(named_road_way_ids)
                 unique_way_count = len(named_road_way_ids - route_way_ids)
                 ratio = unique_way_count/road_way_count
                 if ratio < CONFIG['search']['distinctness_ratio']:
-                    # Named road does not have enough ways distinct from
-                    # the concurrent route.
                     return
+            # Create named road record.
             self.visited_road_count += 1
             self.visited_road_records.append({
                 'visit_order': self.visited_road_count,
