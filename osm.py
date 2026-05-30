@@ -21,8 +21,8 @@ class RoadHandler(osmium.SimpleHandler):
         self.rows = []
         self.node_ways = defaultdict(set)
         self.routes = {}
-        self.route_parents = defaultdict(set)
-        self.way_routes = defaultdict(set)
+        self.rel_parents = defaultdict(set)
+        self.way_rels = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
 
     def way(self, w):
@@ -67,9 +67,9 @@ class RoadHandler(osmium.SimpleHandler):
             'ways': ways,
         }
         for cr in child_relations:
-            self.route_parents[cr].add(r.id)
+            self.rel_parents[cr].add(r.id)
         for w in ways:
-            self.way_routes[w].add(r.id)
+            self.way_rels[w].add(r.id)
 
     @property
     def ways(self) -> gpd.GeoDataFrame:
@@ -111,7 +111,7 @@ def load_osm(osm_data_path):
         )
         data = _process_osm(osm_data_path)
     print("done.")
-    if len(data['routes']) == 0 or len(data['way_routes']) == 0:
+    if len(data['routes']) == 0 or len(data['way_rels']) == 0:
         print(
             "No routes were found. Did you remember to include relations "
             "in your filter?"
@@ -161,9 +161,9 @@ def _process_osm(osm_data_path) -> dict:
         'ways': handler.ways,
         'node_ways': handler.node_ways,
         'routes': handler.routes,
-        'route_parents': handler.route_parents,
+        'rel_parents': handler.rel_parents,
         # 'numbered_routes': handler.numbered_routes,
-        'way_routes': handler.way_routes,
+        'way_rels': handler.way_rels,
         # 'superroutes': handler.superroutes,
         # 'route_superroutes': handler.route_superroutes,
         'ways_sindex': handler.ways.sindex, # Build spatial index

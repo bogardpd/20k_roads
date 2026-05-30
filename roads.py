@@ -26,8 +26,8 @@ class RoadCounter():
         self.ways: gpd.GeoDataFrame | None = None
         self.node_ways: dict | None = None
         self.routes: dict | None = None
-        self.route_parents: dict | None = None
-        self.way_routes: dict | None = None
+        self.rel_parents: dict | None = None
+        self.way_rels: dict | None = None
         self.ways_sindex: gpd.sindex.SpatialIndex | None = None
         self.tracks: gpd.GeoDataFrame | None = None
         self.root_route_way_ids: dict = {}
@@ -223,9 +223,9 @@ class RoadCounter():
             if current_route_id in checked_route_ids:
                 continue
             checked_route_ids.add(current_route_id)
-            if current_route_id not in self.route_parents:
+            if current_route_id not in self.rel_parents:
                 root_parent_ids.add(current_route_id)
-            superroute_ids = self.route_parents[current_route_id]
+            superroute_ids = self.rel_parents[current_route_id]
             if len(superroute_ids) == 0:
                 root_parent_ids.add(current_route_id)
             else:
@@ -238,8 +238,8 @@ class RoadCounter():
         self.ways = osm['ways']
         self.node_ways = osm['node_ways']
         self.routes = osm['routes']
-        self.route_parents = osm['route_parents']
-        self.way_routes = osm['way_routes']
+        self.rel_parents = osm['rel_parents']
+        self.way_rels = osm['way_rels']
         self.ways_sindex = osm['ways_sindex']
 
     def _load_tracks(self):
@@ -257,13 +257,13 @@ class RoadCounter():
 
     def _trace_road(self, way: pd.Series, track_fid: int):
         """Creates a road record starting with a given way."""
-        has_valid_routes = way.way_id in self.way_routes
+        has_valid_routes = way.way_id in self.way_rels
         route_refs = []
         route_way_sets = []
         if has_valid_routes:
             # This way is part of at least one numbered route.
             # Get associated ways from relations index.
-            for r_id in self.way_routes[way.way_id]:
+            for r_id in self.way_rels[way.way_id]:
                 if r_id not in self.visited_route_rel_ids:
                     self._add_route(r_id, track_fid)
                 # Get route ref and geometry:
