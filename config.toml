@@ -78,6 +78,10 @@ networks = [
     "US:WV",
     "US:WY",
 ]
+networks_unsigned = [
+    # Networks to allow even if unsigned (no 'ref'). Network must still be in networks list above.
+    "US:FL:Turnpike",
+]
 
 [crs]
 osm = "EPSG:4326" # WGS-84
