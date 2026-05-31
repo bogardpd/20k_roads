@@ -128,7 +128,7 @@ class RoadCounter():
                     if adj_way_id in checked_ways:
                         continue
                     adj_way = self.ways[adj_way_id]
-                    if adj_way['junction'] == "roundabout":
+                    if adj_way['junction'] in ["circular", "roundabout"]:
                         # Follow roundabout even if name doesn't match.
                         stack.append(adj_way_id)
                     else:

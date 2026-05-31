@@ -33,7 +33,7 @@ class RoadHandler(osmium.SimpleHandler):
             geom = wkb_loads(self._factory.create_linestring(w), hex=True)
         except osmium.InvalidLocationError:
             return
-        if w.tags.get('junction') == "roundabout":
+        if w.tags.get('junction') in ["circular", "roundabout"]:
             # Get all nodes for roundabouts.
             way_nodes = [n.ref for n in w.nodes]
         else:
