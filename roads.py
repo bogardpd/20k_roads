@@ -295,10 +295,20 @@ def format_numbered_route(route: dict) -> str:
     """Formats a numbered route identifier."""
     network = route['network'].split(":")
     if network[0] == "US":
+        name = "-".join(
+            [n for n in [network[1], route['ref']] if n is not None]
+        )
         if len(network) > 2:
-            return f"{network[1]}-{route['ref']} {" ".join(network[2:])}"
-        return f"{network[1]}-{route['ref']}"
-    return f"{route['network']}"
+            return f"{name} {" ".join(network[2:])}"
+        return name
+    if network[0] == "CA":
+        if network[1] == "transcanada":
+            return f"Trans-Canada Highway {route['ref']}"
+        if network[1] == "ON":
+            return f"Ontario Highway {route['ref']}"
+    return " ".split(
+        [n for n in [route['network'], route['ref']] if n is not None]
+    )
 
 
 if __name__ == "__main__":

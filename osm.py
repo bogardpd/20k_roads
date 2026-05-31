@@ -50,8 +50,6 @@ class RoadHandler(osmium.SimpleHandler):
         tags = dict(r.tags)
         if tags.get('network') not in CONFIG['networks']:
             return
-        if tags.get('ref') is None:
-            return
         if tags.get('route') != "road":
             return
         if tags.get('type') not in ["route", "superroute"]:
