@@ -1,7 +1,7 @@
 """Matches driving log tracks to OpenStreetMap roads."""
 import argparse
 import geopandas as gpd
-import pandas as pd
+import numpy as np
 import tomllib
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
@@ -86,7 +86,6 @@ class RoadCounter():
         }
         self.rel_routes[rel_id] = route_id
         self.visited_road_count += 1
-        # mutual_way_ids = self.ways.index.intersection(route_way_ids)
         mutual_way_ids = route_way_ids & self.ways.keys()
         record = {
             'visit_order': self.visited_road_count,
@@ -142,45 +141,34 @@ class RoadCounter():
                         stack.append(adj_way_id)
 
     def _get_segment_ways(self, segment: LineString) -> list[int]:
-        """Gets a Series of way IDs the segment traverses."""
-        points_gdf = gpd.GeoDataFrame(
-            geometry=gpd.points_from_xy(*zip(*segment.coords)),
-            crs=CONFIG['crs']['metric'],
-        )
-        # Get the closest way for every point.
-        closest_way_ids = points_gdf.geometry.apply(
-            lambda r: self._get_closest_way((r.x, r.y))
-        )
-        points_gdf['closest_way_id'] = pd.array(
-            # Handles cases where all values are null.
-            [pd.NA if pd.isna(c) else int(c) for c in closest_way_ids],
-            dtype="Int64",
-        )
-        points_gdf = points_gdf.dropna(subset=['closest_way_id'])
+        """Gets a list of way IDs the segment traverses."""
+        coords = np.array(segment.coords)
 
-        # Find streaks of consecutive points having same closest
-        # OSM way.
-        points_gdf['streak_id'] = (
-            points_gdf['closest_way_id'] \
-            != points_gdf['closest_way_id'].shift()
-        ).cumsum().fillna(0)
-        points_gdf['streak_length'] = (points_gdf
-            .groupby('streak_id')['closest_way_id']
-            .transform("count")
-        )
-        streaks = (
-            points_gdf.groupby(
-                ['closest_way_id', 'streak_id'],
-                sort=False,
-            )['streak_length']
-            .first()
-            .reset_index()
-            .drop_duplicates(subset='closest_way_id', keep='first')
-        )
-        streaks = streaks[
-            streaks['streak_length'] >= CONFIG['search']['consec_pts']
-        ]
-        return streaks['closest_way_id'].to_list()
+        # Get the closest way for every point.
+        closest_way_ids = [self._get_closest_way((x, y)) for x, y in coords]
+        closest_way_ids = [w for w in closest_way_ids if w is not None]
+        if not closest_way_ids:
+            return []
+
+        # Find streaks of consecutive points having same closest OSM
+        # way.
+        streaks = []
+        checked_ways = set()
+        i = 0
+        while i < len(closest_way_ids):
+            way_id = closest_way_ids[i]
+            j = i
+            while j < len(closest_way_ids) and closest_way_ids[j] == way_id:
+                j += 1
+            streak_length = j - i
+            if (
+                streak_length >= CONFIG['search']['consec_pts']
+                and way_id not in checked_ways
+            ):
+                streaks.append(way_id)
+                checked_ways.add(way_id)
+            i = j
+        return streaks
 
     def _get_route_way_ids(self, rel_id: int, route_id: int) -> set:
         """Gets relations and ways for a route from a given rel_id."""
