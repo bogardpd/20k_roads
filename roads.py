@@ -23,7 +23,8 @@ class RoadCounter():
         self.osm_pbf_path: Path = osm_pbf_path
         self.tracks_path: Path = tracks_path
         self.output_dir: Path = output_dir
-        self.ways: gpd.GeoDataFrame | None = None
+        self.ways: dict | None = None
+        self.ways_index: list | None = None
         self.way_nodes: dict | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
@@ -55,7 +56,9 @@ class RoadCounter():
         ) as prog_bar:
             for track_fid, track in prog_bar:
                 for segment in track.geometry.geoms:
-                    self._collect_segment(segment, track_fid)
+                    for seg_way_id in self._get_segment_ways(segment):
+                        self._trace_road(seg_way_id, track_fid)
+                    # self._collect_segment(segment, track_fid)
                 prog_bar.set_postfix(roads=self.visited_road_count)
 
     def export_roads(self):
@@ -83,7 +86,8 @@ class RoadCounter():
         }
         self.rel_routes[rel_id] = route_id
         self.visited_road_count += 1
-        mutual_way_ids = self.ways.index.intersection(route_way_ids)
+        # mutual_way_ids = self.ways.index.intersection(route_way_ids)
+        mutual_way_ids = route_way_ids & self.ways.keys()
         record = {
             'visit_order': self.visited_road_count,
             'name': format_numbered_route(self.rels[rel_id]),
@@ -93,21 +97,11 @@ class RoadCounter():
             'origin_way': None,
             'origin_rel': rel_id,
             'geometry': MultiLineString(
-                self.ways['geometry'].loc[mutual_way_ids].to_list()
+                [self.ways[w]['geometry'] for w in mutual_way_ids]
             ),
         }
         self.visited_road_records.append(record)
         return route_id
-
-    def _collect_segment(self, segment: LineString, track_fid: int):
-        """Collects roads for a given driving track segment."""
-        seg_ways = self._get_segment_ways(segment).to_frame()
-        seg_ways = seg_ways.join(
-            self.ways[['road_name', 'route_ref', 'formatted_name']],
-            on='way_id',
-        )
-        for _, seg_way in seg_ways.iterrows():
-            self._trace_road(seg_way, track_fid)
 
     def _get_closest_way(self, coords: tuple) -> int:
         """Looks up the closest OSM way to a given coordinate."""
@@ -117,11 +111,13 @@ class RoadCounter():
         ))[1]
         if len(closest_idx) == 0:
             return None
-        return self.ways.index[closest_idx[0]]
+        # closest_idx[0] is a positional index, so we need to get the
+        # actual index from ways.
+        return self.ways_index[closest_idx[0]]
 
     def _get_named_road_way_ids(
         self,
-        seg_road_ways: dict,
+        seg_road_geoms: dict,
         way_id: int,
         road_name: str,
     ):
@@ -129,23 +125,23 @@ class RoadCounter():
         stack = [way_id]
         while stack:
             current_way_id = stack.pop()
-            if current_way_id in seg_road_ways:
+            if current_way_id in seg_road_geoms:
                 continue
-            way = self.ways.loc[current_way_id]
+            way = self.ways[current_way_id]
             self.visited_road_way_ids.add(current_way_id)
-            seg_road_ways[current_way_id] = way.geometry
+            seg_road_geoms[current_way_id] = way['geometry']
 
-            for node in self.way_nodes[current_way_id]:
+            for node in way['nodes']:
                 for adj_way_id in self.node_ways[node]:
-                    if adj_way_id in seg_road_ways:
+                    if adj_way_id in seg_road_geoms:
                         continue
-                    adj_way = self.ways.loc[adj_way_id]
-                    if pd.isna(adj_way.road_name):
+                    adj_way = self.ways[adj_way_id]
+                    if adj_way['road_name'] is None:
                         continue
-                    if adj_way.road_name == road_name:
+                    if adj_way['road_name'] == road_name:
                         stack.append(adj_way_id)
 
-    def _get_segment_ways(self, segment: LineString) -> pd.Series:
+    def _get_segment_ways(self, segment: LineString) -> list[int]:
         """Gets a Series of way IDs the segment traverses."""
         points_gdf = gpd.GeoDataFrame(
             geometry=gpd.points_from_xy(*zip(*segment.coords)),
@@ -181,9 +177,10 @@ class RoadCounter():
             .reset_index()
             .drop_duplicates(subset='closest_way_id', keep='first')
         )
-        return streaks[
+        streaks = streaks[
             streaks['streak_length'] >= CONFIG['search']['consec_pts']
-        ]['closest_way_id'].rename('way_id')
+        ]
+        return streaks['closest_way_id'].to_list()
 
     def _get_route_way_ids(self, rel_id: int, route_id: int) -> set:
         """Gets relations and ways for a route from a given rel_id."""
@@ -219,7 +216,7 @@ class RoadCounter():
         """Loads OSM PBF data."""
         osm = load_osm(self.osm_pbf_path)
         self.ways = osm['ways']
-        self.way_nodes = osm['way_nodes']
+        self.ways_index = list(osm['ways'].keys()) # Positional index
         self.node_ways = osm['node_ways']
         self.rels = osm['routes']
         self.rel_parents = osm['rel_parents']
@@ -239,9 +236,9 @@ class RoadCounter():
         print("done.")
         self.tracks = tracks.to_crs(CONFIG['crs']['metric'])
 
-    def _trace_road(self, way: pd.Series, track_fid: int):
+    def _trace_road(self, way_id: int, track_fid: int):
         """Creates a road record starting with a given way."""
-        has_valid_rels = way.way_id in self.way_rels
+        has_valid_rels = way_id in self.way_rels
         route_refs = []
         route_way_sets = []
 
@@ -249,7 +246,7 @@ class RoadCounter():
         if has_valid_rels:
             # This way is part of at least one valid relation. Build
             # numbered routes from relations.
-            for rel_id in self.way_rels[way.way_id]:
+            for rel_id in self.way_rels[way_id]:
                 if rel_id not in self.rel_routes:
                     self._add_route(rel_id, track_fid)
                 # Get route ref and geometry:
@@ -259,21 +256,22 @@ class RoadCounter():
                 route_way_sets.append(route['way_ids'])
 
         # Find named road.
-        if way.way_id not in self.visited_road_way_ids:
-            if pd.isna(way.road_name):
+        if way_id not in self.visited_road_way_ids:
+            way = self.ways[way_id]
+            if way['road_name'] is None:
                 return
-            if any(ref in way.road_name for ref in route_refs):
+            if any(ref in way['road_name'] for ref in route_refs):
                 # Name matches a numbered route we're already using.
                 return
-            seg_road_ways = {}
+            seg_road_geoms = {}
             self._get_named_road_way_ids(
-                seg_road_ways,
-                way.way_id,
-                way.road_name,
+                seg_road_geoms,
+                way_id,
+                way['road_name'],
             )
             # Check that named road is distinct enough from any numbered
             # routes sharing the same way.
-            named_road_way_ids = set(seg_road_ways.keys())
+            named_road_way_ids = set(seg_road_geoms.keys())
             for route_way_ids in route_way_sets:
                 road_way_count = len(named_road_way_ids)
                 unique_way_count = len(named_road_way_ids - route_way_ids)
@@ -284,13 +282,13 @@ class RoadCounter():
             self.visited_road_count += 1
             self.visited_road_records.append({
                 'visit_order': self.visited_road_count,
-                'name': way.road_name,
+                'name': way['road_name'],
                 'is_numbered_route': False,
                 'track_fid': track_fid,
                 'track_utc_start': self.tracks.loc[track_fid]['utc_start'],
-                'origin_way': way.way_id,
+                'origin_way': way_id,
                 'origin_rel': None,
-                'geometry': MultiLineString(seg_road_ways.values()),
+                'geometry': MultiLineString(seg_road_geoms.values()),
             })
 
 

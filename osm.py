@@ -2,6 +2,7 @@
 import geopandas as gpd
 import hashlib
 import json
+import numpy as np
 import osmium
 import pandas as pd
 import pickle
@@ -20,7 +21,6 @@ class RoadHandler(osmium.SimpleHandler):
         super().__init__()
         self.rows = []
         self.node_ways = defaultdict(set)
-        self.way_nodes = defaultdict(set)
         self.routes = {}
         self.rel_parents = defaultdict(set)
         self.way_rels = defaultdict(set)
@@ -46,10 +46,11 @@ class RoadHandler(osmium.SimpleHandler):
             'highway': w.tags.get('highway'),
             'road_name': w.tags.get('name'),
             'route_ref': w.tags.get('ref'),
+            'junction': w.tags.get('junction'),
+            'nodes': way_nodes,
         })
         for way_node in way_nodes:
             self.node_ways[way_node].add(w.id)
-            self.way_nodes[w.id].add(way_node)
 
     def relation(self, r):
         """Processing for each relation in OSM data."""
@@ -76,7 +77,7 @@ class RoadHandler(osmium.SimpleHandler):
             self.way_rels[w].add(r.id)
 
     @property
-    def ways(self) -> gpd.GeoDataFrame:
+    def ways_gdf(self) -> gpd.GeoDataFrame:
         """Creates a GeoDataFrame of ways."""
         ways = gpd.GeoDataFrame(
             self.rows,
@@ -162,13 +163,15 @@ def _process_osm(osm_data_path) -> dict:
         # Store checksum of OSM PBF file.
         json.dump(metadata, f, indent=2)
     data = {
-        'ways': handler.ways,
-        'way_nodes': handler.way_nodes,
+        'ways': handler.ways_gdf \
+            .astype(object) \
+            .replace({np.nan: None}) \
+            .to_dict(orient='index'),
         'node_ways': handler.node_ways,
         'routes': handler.routes,
         'rel_parents': handler.rel_parents,
         'way_rels': handler.way_rels,
-        'ways_sindex': handler.ways.sindex, # Build spatial index
+        'ways_sindex': handler.ways_gdf.sindex, # Build spatial index
     }
     # Cache processed data.
     cache_path = _cache_path(osm_data_path)
