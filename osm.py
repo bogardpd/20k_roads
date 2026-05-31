@@ -20,6 +20,7 @@ class RoadHandler(osmium.SimpleHandler):
         super().__init__()
         self.rows = []
         self.node_ways = defaultdict(set)
+        self.way_nodes = defaultdict(set)
         self.routes = {}
         self.rel_parents = defaultdict(set)
         self.way_rels = defaultdict(set)
@@ -33,17 +34,22 @@ class RoadHandler(osmium.SimpleHandler):
             geom = wkb_loads(self._factory.create_linestring(w), hex=True)
         except osmium.InvalidLocationError:
             return
+        if w.tags.get('junction') == "roundabout":
+            # Get all nodes for roundabouts.
+            way_nodes = [n.ref for n in w.nodes]
+        else:
+            # Get only first and last nodes for other ways.
+            way_nodes = [w.nodes[0].ref, w.nodes[-1].ref]
         self.rows.append({
             'geometry': geom,
             'id': w.id,
             'highway': w.tags.get('highway'),
             'road_name': w.tags.get('name'),
             'route_ref': w.tags.get('ref'),
-            'first_node': w.nodes[0].ref,
-            'last_node': w.nodes[-1].ref,
         })
-        for node in [w.nodes[0], w.nodes[-1]]:
-            self.node_ways[node.ref].add(w.id)
+        for way_node in way_nodes:
+            self.node_ways[way_node].add(w.id)
+            self.way_nodes[w.id].add(way_node)
 
     def relation(self, r):
         """Processing for each relation in OSM data."""
@@ -157,13 +163,11 @@ def _process_osm(osm_data_path) -> dict:
         json.dump(metadata, f, indent=2)
     data = {
         'ways': handler.ways,
+        'way_nodes': handler.way_nodes,
         'node_ways': handler.node_ways,
         'routes': handler.routes,
         'rel_parents': handler.rel_parents,
-        # 'numbered_routes': handler.numbered_routes,
         'way_rels': handler.way_rels,
-        # 'superroutes': handler.superroutes,
-        # 'route_superroutes': handler.route_superroutes,
         'ways_sindex': handler.ways.sindex, # Build spatial index
     }
     # Cache processed data.

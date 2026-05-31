@@ -24,6 +24,7 @@ class RoadCounter():
         self.tracks_path: Path = tracks_path
         self.output_dir: Path = output_dir
         self.ways: gpd.GeoDataFrame | None = None
+        self.way_nodes: dict | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
@@ -134,7 +135,7 @@ class RoadCounter():
             self.visited_road_way_ids.add(current_way_id)
             seg_road_ways[current_way_id] = way.geometry
 
-            for node in [way.first_node, way.last_node]:
+            for node in self.way_nodes[current_way_id]:
                 for adj_way_id in self.node_ways[node]:
                     if adj_way_id in seg_road_ways:
                         continue
@@ -218,6 +219,7 @@ class RoadCounter():
         """Loads OSM PBF data."""
         osm = load_osm(self.osm_pbf_path)
         self.ways = osm['ways']
+        self.way_nodes = osm['way_nodes']
         self.node_ways = osm['node_ways']
         self.rels = osm['routes']
         self.rel_parents = osm['rel_parents']
@@ -251,7 +253,8 @@ class RoadCounter():
                 if rel_id not in self.rel_routes:
                     self._add_route(rel_id, track_fid)
                 # Get route ref and geometry:
-                route_refs.append(self.rels[rel_id]['ref'])
+                if self.rels[rel_id]['ref'] is not None:
+                    route_refs.append(self.rels[rel_id]['ref'])
                 route = self.routes[self.rel_routes[rel_id]]
                 route_way_sets.append(route['way_ids'])
 
