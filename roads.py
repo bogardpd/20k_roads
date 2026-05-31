@@ -102,18 +102,6 @@ class RoadCounter():
         self.visited_road_records.append(record)
         return route_id
 
-    def _get_closest_way(self, coords: tuple) -> int:
-        """Looks up the closest OSM way to a given coordinate."""
-        closest_idx = list(self.ways_sindex.nearest(
-            Point(coords),
-            max_distance=CONFIG['search']['max_dist'],
-        ))[1]
-        if len(closest_idx) == 0:
-            return None
-        # closest_idx[0] is a positional index, so we need to get the
-        # actual index from ways.
-        return self.ways_index[closest_idx[0]]
-
     def _get_named_road_way_ids(
         self,
         seg_road_geoms: dict,
@@ -145,7 +133,14 @@ class RoadCounter():
         coords = np.array(segment.coords)
 
         # Get the closest way for every point.
-        closest_way_ids = [self._get_closest_way((x, y)) for x, y in coords]
+        input_idx, result_idx = self.ways_sindex.nearest(
+            [Point(x, y) for x, y in coords],
+            max_distance=CONFIG['search']['max_dist'],
+            return_all=False,
+        )
+        closest_way_ids = [None] * len(coords)
+        for i, r in zip(input_idx, result_idx):
+            closest_way_ids[i] = self.ways_index[r]
         closest_way_ids = [w for w in closest_way_ids if w is not None]
         if not closest_way_ids:
             return []
