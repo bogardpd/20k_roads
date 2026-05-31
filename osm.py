@@ -4,7 +4,6 @@ import hashlib
 import json
 import numpy as np
 import osmium
-import pandas as pd
 import pickle
 import sys
 import tomllib
@@ -85,7 +84,6 @@ class RoadHandler(osmium.SimpleHandler):
         ).set_index('id')
         ways['road_name'] = ways['road_name'].astype("string")
         ways['route_ref'] = ways['route_ref'].astype("string")
-        ways['formatted_name'] = ways.apply(format_road_name, axis=1)
         return ways.to_crs(CONFIG['crs']['metric'])
 
 def load_osm(osm_data_path):
@@ -124,17 +122,6 @@ def load_osm(osm_data_path):
         sys.exit(1)
 
     return data
-
-def format_road_name(row: pd.Series) -> str:
-    """
-    Formats a road name for an OSM way.
-    Generally only used for roads that have no ref or whose ref isn't in
-    the networks list in config, as those roads will use
-    format_numbered_route.
-    """
-    if pd.isna(row.road_name):
-        return row.route_ref
-    return row.road_name
 
 def _cache_path(osm_data_path):
     return osm_data_path.with_suffix('.pickle')
