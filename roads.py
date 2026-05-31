@@ -112,30 +112,24 @@ class RoadCounter():
         stack = [way_id]
         checked_ways = set()
         while stack:
-            current_way_id = stack.pop()
+            current_way_id= stack.pop()
             if current_way_id in checked_ways:
                 continue
             checked_ways.add(current_way_id)
             way = self.ways[current_way_id]
-            self.visited_road_way_ids.add(current_way_id)
             if way['road_name'] == road_name:
-                # Roundabouts might be checked even if the name doesn't
-                # match, so only include roads with a matching name.
+                # Road name matches, so store its way.
                 seg_road_geoms[current_way_id] = way['geometry']
-
-            for node in way['nodes']:
-                for adj_way_id in self.node_ways[node]:
-                    if adj_way_id in checked_ways:
-                        continue
-                    adj_way = self.ways[adj_way_id]
-                    if adj_way['junction'] in ["circular", "roundabout"]:
-                        # Follow roundabout even if name doesn't match.
+                self.visited_road_way_ids.add(current_way_id)
+                for node in way['nodes']:
+                    for adj_way_id in self.node_ways[node]:
                         stack.append(adj_way_id)
-                    else:
-                        if adj_way['road_name'] is None:
-                            continue
-                        if adj_way['road_name'] == road_name:
-                            stack.append(adj_way_id)
+            elif way['junction'] in ["circular", "roundabout"]:
+                # Follow roundabout without matching name, but don't
+                # store its ways.
+                for node in way['nodes']:
+                    for adj_way_id in self.node_ways[node]:
+                        stack.append(adj_way_id)
 
     def _get_segment_ways(self, segment: LineString) -> list[int]:
         """Gets a list of way IDs the segment traverses."""
