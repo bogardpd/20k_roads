@@ -25,7 +25,6 @@ class RoadCounter():
         self.output_dir: Path = output_dir
         self.ways: dict | None = None
         self.ways_index: list | None = None
-        self.way_nodes: dict | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
@@ -35,7 +34,6 @@ class RoadCounter():
         self.tracks: gpd.GeoDataFrame | None = None
         self.routes: dict = {}
         self._route_inc: int = 0
-        self.root_route_way_ids: dict = {}
         self.visited_road_count: int = 0
         self.visited_road_way_ids: set = set()
         self.visited_road_records: list = []
