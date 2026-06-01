@@ -4,15 +4,29 @@ A tool to compare GPS driving tracks to OSM roads.
 
 ## Usage
 
+### Build Visited Roads
+
 ```
 python roads.py --osm region.osm.pbf --states tl_2023_us_state.zip --tracks tracks.gpkg --output-dir /path-to-dir
 ```
 
-### Arguments
+Arguments:
 
 - **`--osm`:** An OpenStreetMap PBF file containing roads for the region(s) that all of the driving tracks are in.
 - **`--tracks`:** A GeoPackage file that contains a `driving_tracks` MultiLineString layer with a `utc_start` datetime column.
 - **`--output-dir`:** A directory to store the outputs from this script.
+
+### Chart Cumulative Roads
+
+Creates a simple chart of cumulative roads visited over time.
+
+```
+python chart_cumulative_roads.py 20k_roads.gpkg
+```
+
+Arguments:
+
+- **`roads_path`:** The output file from roads.py.
 
 ## Data Sources
 

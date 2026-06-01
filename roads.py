@@ -324,7 +324,7 @@ def format_numbered_route(route: dict) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        prog="20k_roads",
+        prog="20000 Roads",
         description="Matches GPS tracks to roads",
     )
     parser.add_argument('--osm',
