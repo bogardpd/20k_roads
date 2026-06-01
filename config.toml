@@ -20,9 +20,10 @@ networks = [
     # UK:
     "UK:motorway",
     # US Interstates:
+    # Deliberately omitting "US:I:Alternate" as it has too many paths that don't make sense as one road.
     "US:I", "US:I:Business", "US:I:Business:Loop", "US:I:Express", "US:I:Express:Toll", "US:I:Spur", "US:I:Truck",
     # US Routes:
-    "US:US", "US:US:Business", "US:US:Bypass", "US:US:Express",
+    "US:US", "US:US:Alternate", "US:US:Business", "US:US:Bypass", "US:US:Express",
     # US State Routes:
     "US:AL",
     "US:AK",
@@ -91,7 +92,7 @@ output = "EPSG:4326" # WGS-84
 [search]
 # Parameters for finding roads.
 max_dist_track = 50 # Max meters (in metric CRS) to search for nearby way from track
-max_dist_gap = 50 # Max meters (in metric CRS) to search for way with same name when tracing named roads
+max_dist_gap = 80 # Max meters (in metric CRS) to search for way with same name when tracing named roads
 
 consec_pts = 4 # Min number of consecutive points to count as road match
 highway_types = [
