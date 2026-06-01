@@ -18,11 +18,11 @@ class RoadCounter():
         self,
         osm_pbf_path: Path,
         tracks_path: Path,
-        output_dir: Path,
+        output_path: Path,
     ):
         self.osm_pbf_path: Path = osm_pbf_path
         self.tracks_path: Path = tracks_path
-        self.output_dir: Path = output_dir
+        self.output_path: Path = output_path
         self.ways: dict | None = None
         self.ways_index: list | None = None
         self.node_ways: dict | None = None
@@ -69,7 +69,7 @@ class RoadCounter():
             geometry='geometry',
             crs=CONFIG['crs']['metric']
         ).to_crs(CONFIG['crs']['output'])
-        gpkg_path = self.output_dir / CONFIG['output']['gpkg']
+        gpkg_path = self.output_path
         visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
         print(f"Exported GeoPackage to {gpkg_path}.")
 
@@ -337,13 +337,13 @@ if __name__ == "__main__":
         required=True,
         help="GeoPackage file containing driving tracks",
     )
-    parser.add_argument('--output-dir',
+    parser.add_argument('--output',
         type=Path,
         required=True,
-        help="Directory to store output data",
+        help="GeoPackage (.gpkg) file to store output data",
     )
     args = parser.parse_args()
 
-    rc = RoadCounter(args.osm, args.tracks, args.output_dir)
+    rc = RoadCounter(args.osm, args.tracks, args.output)
     rc.collect_roads()
     rc.export_roads()
