@@ -289,20 +289,36 @@ class RoadCounter():
 def format_numbered_route(route: dict) -> str:
     """Formats a numbered route identifier."""
     network = route['network'].split(":")
+    ref = route['ref']
     if network[0] == "US":
         name = "-".join(
-            [n for n in [network[1], route['ref']] if n is not None]
+            [n for n in [network[1], ref] if n is not None]
         )
         if len(network) > 2:
             return f"{name} {" ".join(network[2:])}"
         return name
+    if network[0] == "AU":
+        if network[1] == "WA":
+            if network[2] == "NR":
+                return f"National Route {ref}"
+            if network[2] == "S":
+                return f"State Route {ref}"
+        return f"Route {ref}"
+    if network[0] == "BAB":
+        return f"{network[1]} {ref}"
     if network[0] == "CA":
         if network[1] == "transcanada":
-            return f"Trans-Canada Highway {route['ref']}"
-        if network[1] == "ON":
-            return f"Ontario Highway {route['ref']}"
+            return f"Trans-Canada Highway {ref}"
+        return f"{network[1]} Highway {ref}"
+    if network[0] == "JP":
+        if network[1] == "national":
+            return f"National Route {ref}"
+        if network[1] == "E":
+            return ref
+    if network[0] == "NZ":
+        return f"SH {ref}"
     return " ".join(
-        [n for n in [route['network'], route['ref']] if n is not None]
+        [n for n in [route['network'], ref] if n is not None]
     )
 
 

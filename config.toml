@@ -65,7 +65,7 @@ networks = [
     "US:OK",
     "US:OR",
     "US:PA",
-    "US:PR",
+    "US:PR", "US:PR:Primary",
     "US:RI",
     "US:SC",
     "US:SD",
