@@ -119,9 +119,19 @@ class RoadCounter():
                 # Road name matches, so store its way.
                 seg_road_geoms[current_way_id] = way['geometry']
                 self.visited_road_way_ids.add(current_way_id)
+                # Check ways sharing nodes with this way.
                 for node in way['nodes']:
                     for adj_way_id in self.node_ways[node]:
                         stack.append(adj_way_id)
+                # Check for nearby ways with same name.
+                nearby_idx = self.ways_sindex.query(
+                    way['geometry'],
+                    predicate='dwithin',
+                    distance=CONFIG['search']['max_dist_gap'],
+                    output_format='indices'
+                )
+                nearby = [self.ways_index[n] for n in nearby_idx]
+                stack.extend(nearby)
             elif way['junction'] in ["circular", "roundabout"]:
                 # Follow roundabout without matching name, but don't
                 # store its ways.
@@ -136,7 +146,7 @@ class RoadCounter():
         # Get the closest way for every point.
         input_idx, result_idx = self.ways_sindex.nearest(
             [Point(x, y) for x, y in coords],
-            max_distance=CONFIG['search']['max_dist'],
+            max_distance=CONFIG['search']['max_dist_track'],
             return_all=False,
         )
         closest_way_ids = [None] * len(coords)

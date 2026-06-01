@@ -90,7 +90,9 @@ output = "EPSG:4326" # WGS-84
 
 [search]
 # Parameters for finding roads.
-max_dist = 50 # Max meters (in metric CRS) to search for nearby road
+max_dist_track = 50 # Max meters (in metric CRS) to search for nearby way from track
+max_dist_gap = 50 # Max meters (in metric CRS) to search for way with same name when tracing named roads
+
 consec_pts = 4 # Min number of consecutive points to count as road match
 highway_types = [
     # Filter for OSM highway tag
