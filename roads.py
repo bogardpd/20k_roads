@@ -305,7 +305,7 @@ def format_numbered_route(route: dict) -> str:
                 return f"State Route {ref}"
         return f"Route {ref}"
     if network[0] == "BAB":
-        return f"A {ref}"
+        return ref
     if network[0] == "CA":
         if network[1] == "transcanada":
             return f"Trans-Canada Highway {ref}"
