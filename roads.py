@@ -301,7 +301,7 @@ def format_numbered_route(route: dict) -> str:
             return f"Trans-Canada Highway {route['ref']}"
         if network[1] == "ON":
             return f"Ontario Highway {route['ref']}"
-    return " ".split(
+    return " ".join(
         [n for n in [route['network'], route['ref']] if n is not None]
     )
 
