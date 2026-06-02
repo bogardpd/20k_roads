@@ -8,7 +8,7 @@ from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
 from tqdm import tqdm
 
-from osm import load_osm
+from osm import OSMDataContainer
 
 with open('config.toml', 'rb') as config_file:
     CONFIG = tomllib.load(config_file)
@@ -30,9 +30,9 @@ class RoadCounter():
         self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
-        self.rel_routes: dict = {}
         self.way_rels: dict | None = None
         self.ways_sindex: gpd.sindex.SpatialIndex | None = None
+        self.rel_routes: dict = {}
         self.tracks: gpd.GeoDataFrame | None = None
         self.routes: dict = {}
         self._route_inc: int = 0
@@ -48,7 +48,7 @@ class RoadCounter():
         )
         self._load_osm()
         self._load_tracks()
-        print("Processing tracks...")
+        print(f"{datetime.now()} Processing tracks...")
         with tqdm(
             self.tracks.iterrows(),
             total=len(self.tracks),
@@ -73,7 +73,7 @@ class RoadCounter():
         ).to_crs(CONFIG['crs']['output'])
         gpkg_path = self.output_path
         visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
-        print(f"Exported GeoPackage to {gpkg_path}.")
+        print(f"{datetime.now()} Exported GeoPackage to {gpkg_path}.")
 
 
     def _add_route(self, rel_id: int, track_fid: int):
@@ -210,15 +210,16 @@ class RoadCounter():
 
     def _load_osm(self):
         """Loads OSM PBF data."""
-        osm = load_osm(self.osm_pbf_path)
-        self.ways = osm['ways']
-        self.ways_index = list(osm['ways'].keys()) # Positional index
-        self.way_nodes = osm['way_nodes']
-        self.node_ways = osm['node_ways']
-        self.rels = osm['routes']
-        self.rel_parents = osm['rel_parents']
-        self.way_rels = osm['way_rels']
-        self.ways_sindex = osm['ways_sindex']
+        osm = OSMDataContainer(self.osm_pbf_path)
+        osm.load_data()
+        self.ways = osm.ways
+        self.ways_index = list(osm.ways.keys()) # Positional index
+        self.way_nodes = osm.way_nodes
+        self.node_ways = osm.node_ways
+        self.rels = osm.rels
+        self.rel_parents = osm.rel_parents
+        self.way_rels = osm.way_rels
+        self.ways_sindex = osm.ways_sindex
 
     def _load_tracks(self):
         """Loads GeoPackage driving track data."""

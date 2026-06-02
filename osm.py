@@ -9,6 +9,7 @@ import sys
 import tomllib
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 from shapely.wkb import loads as wkb_loads
 
 with open('config.toml', 'rb') as config_file:
@@ -92,93 +93,137 @@ class RoadHandler(osmium.SimpleHandler):
         ways['route_ref'] = ways['route_ref'].astype("string")
         return ways.to_crs(CONFIG['crs']['metric'])
 
-def load_osm(osm_data_path):
-    """Loads data from OSM PBF file."""
-    cache_path = _cache_path(osm_data_path, 'pickle')
-    cache_path_ways = _cache_path(osm_data_path, 'geoparquet')
-    checksum_path = _checksum_path(osm_data_path)
+class OSMDataContainer():
+    """Holds processed OSM data."""
 
-    if (
-        checksum_path.is_file()
-        and cache_path.is_file()
-        and cache_path_ways.is_file()
-    ):
-        with open(checksum_path, 'r', encoding='utf-8') as csf:
-            osm_cache_checksum = json.load(csf)['checksum']
-        if osm_cache_checksum == _checksum(osm_data_path):
-            # Load cached data.
-            print(f"{datetime.now()} Loading pickle...")
-            with open(cache_path, 'rb') as cf:
-                data = pickle.load(cf)
-            print(f"{datetime.now()} done.")
-            print(f"{datetime.now()} Loading ways from geoparquet...")
-            ways_gdf = gpd.read_parquet(cache_path_ways)
-            print(f"{datetime.now()} done.")
+    def __init__(self, osm_data_path):
+        self.ways: dict | None = None
+        self.ways_index: list | None = None
+        self.way_nodes: dict | None = None
+        self.node_ways: dict | None = None
+        self.rels: dict | None = None
+        self.rel_parents: dict | None = None
+        self.way_rels: dict | None = None
+        self.ways_sindex: gpd.sindex.SpatialIndex | None = None
+        self._osm_data_path: Path = osm_data_path
+        self._ways_gdf: gpd.GeoDataFrame | None = None
+
+    def load_data(self):
+        """Loads data from OSM PBF file."""
+        cache_path = self._cache_path('pickle')
+        cache_path_ways = self._cache_path('geoparquet')
+        checksum_path = self._checksum_path()
+
+        if (
+            checksum_path.is_file()
+            and cache_path.is_file()
+            and cache_path_ways.is_file()
+        ):
+            with open(checksum_path, 'r', encoding='utf-8') as csf:
+                osm_cache_checksum = json.load(csf)['checksum']
+            if osm_cache_checksum == self._checksum():
+                # Load cached data.
+                self._read_cache_pickle()
+                self._read_cache_geoparquet()
+            else:
+                self._process_osm()
         else:
-            data, ways_gdf = _process_osm(osm_data_path)
-    else:
-        data, ways_gdf = _process_osm(osm_data_path)
-    if len(data['routes']) == 0 or len(data['way_rels']) == 0:
-        print(
-            "No routes were found. Did you remember to include relations "
-            "in your filter?"
-        )
-        sys.exit(1)
-    print(f"{datetime.now()} Creating ways dict...")
-    data['ways'] = ways_gdf \
-        .astype(object) \
-        .replace({np.nan: None}) \
-        .to_dict(orient='index')
-    print(f"{datetime.now()} done.")
+            self._process_osm()
 
-    return data
+        print(f"{datetime.now()} Creating ways dict...")
+        self.ways = self._ways_gdf \
+            .astype(object) \
+            .replace({np.nan: None}) \
+            .to_dict(orient='index')
+        print(f"{datetime.now()} done.")
 
-def _cache_path(osm_data_path, cache_type):
-    suffixes = {
-        'pickle': ".pickle",
-        'geoparquet': ".ways.parquet",
-    }
-    return osm_data_path.with_suffix(suffixes[cache_type])
+    def _cache_path(self, cache_type):
+        suffixes = {
+            'pickle': ".pickle",
+            'geoparquet': ".ways.parquet",
+        }
+        return self._osm_data_path.with_suffix(suffixes[cache_type])
 
-def _checksum(osm_data_path):
-    h = hashlib.sha256()
-    with open(osm_data_path, 'rb') as f:
-        while chunk := f.read(1 << 20):
-            h.update(chunk)
-    return h.hexdigest()
+    def _checksum(self):
+        h = hashlib.sha256()
+        with open(self._osm_data_path, 'rb') as f:
+            while chunk := f.read(1 << 20):
+                h.update(chunk)
+        return h.hexdigest()
 
-def _checksum_path(osm_data_path):
-    return osm_data_path.with_suffix('.checksum.json')
+    def _checksum_path(self):
+        return self._osm_data_path.with_suffix('.checksum.json')
 
-def _process_osm(osm_data_path) -> tuple:
-    """Processes the provided OSM PBF file."""
-    print(f"{datetime.now()} No cache available. Processing OSM PBF...")
-    handler = RoadHandler()
-    handler.apply_file(osm_data_path, locations=True)
-    metadata = {
-        'source': str(osm_data_path),
-        'checksum': _checksum(osm_data_path),
-        'processed_at': datetime.now(timezone.utc).isoformat(),
-    }
-    checksum_path = _checksum_path(osm_data_path)
-    with open(checksum_path, 'w', encoding='utf-8') as f:
-        # Store checksum of OSM PBF file.
-        json.dump(metadata, f, indent=2)
-    data = {
-        'node_ways': handler.node_ways,
-        'way_nodes': handler.way_nodes,
-        'routes': handler.routes,
-        'rel_parents': handler.rel_parents,
-        'way_rels': handler.way_rels,
-        'ways_sindex': handler.ways_gdf.sindex, # Build spatial index
-    }
-    # Cache processed data.
-    cache_path = _cache_path(osm_data_path, 'pickle')
-    print(f"{datetime.now()} Writing geoparquet...")
-    handler.ways_gdf.to_parquet(_cache_path(osm_data_path, 'geoparquet'))
-    print(f"{datetime.now()} done.")
-    print(f"{datetime.now()} Writing pickle...")
-    with open(cache_path, 'wb') as f:
-        pickle.dump(data, f)
-    print(f"{datetime.now()} done.")
-    return (data, handler.ways_gdf)
+    def _process_osm(self) -> None:
+        """Processes the provided OSM PBF file."""
+        print(f"{datetime.now()} No cache available. Processing OSM PBF...")
+        handler = RoadHandler()
+        handler.apply_file(self._osm_data_path, locations=True)
+        metadata = {
+            'source': str(self._osm_data_path),
+            'checksum': self._checksum(),
+            'processed_at': datetime.now(timezone.utc).isoformat(),
+        }
+        checksum_path = self._checksum_path()
+        with open(checksum_path, 'w', encoding='utf-8') as f:
+            # Store checksum of OSM PBF file.
+            json.dump(metadata, f, indent=2)
+
+        self.node_ways = handler.node_ways
+        self.way_nodes = handler.way_nodes
+        self.rels = handler.routes
+        self.rel_parents = handler.rel_parents
+        self.way_rels = handler.way_rels
+        self.ways_sindex = handler.ways_gdf.sindex # Build spatial index
+        self._ways_gdf = handler.ways_gdf
+
+        if not self.rels or not self.way_rels:
+            print(
+                "No routes were found. Did you remember to include relations "
+                "in your filter?"
+            )
+            sys.exit(1)
+
+        # Cache processed data.
+        self._write_cache_geoparquet()
+        self._write_cache_pickle()
+
+    def _read_cache_geoparquet(self) -> None:
+        """Reads data from geoparquet file."""
+        print(f"{datetime.now()} Reading ways from geoparquet...")
+        self._ways_gdf = gpd.read_parquet(self._cache_path('geoparquet'))
+        print(f"{datetime.now()} done.")
+
+    def _read_cache_pickle(self) -> None:
+        """Reads data from pickle file."""
+        print(f"{datetime.now()} Reading pickle...")
+        with open(self._cache_path('pickle'), 'rb') as f:
+            data = pickle.load(f)
+        self.node_ways = data['node_ways']
+        self.way_nodes = data['way_nodes']
+        self.rels = data['rels']
+        self.rel_parents = data['rel_parents']
+        self.way_rels = data['way_rels']
+        self.ways_sindex = data['ways_sindex']
+        print(f"{datetime.now()} done.")
+
+    def _write_cache_geoparquet(self) -> None:
+        """Stores data as geoparquet file."""
+        print(f"{datetime.now()} Writing geoparquet...")
+        self._ways_gdf.to_parquet(self._cache_path('geoparquet'))
+        print(f"{datetime.now()} done.")
+
+    def _write_cache_pickle(self) -> None:
+        """Stores data as pickle file."""
+        print(f"{datetime.now()} Writing pickle...")
+        data = {
+            'node_ways': self.node_ways,
+            'way_nodes': self.way_nodes,
+            'rels': self.rels,
+            'rel_parents': self.rel_parents,
+            'way_rels': self.way_rels,
+            'ways_sindex': self._ways_gdf.sindex,
+        }
+        with open(self._cache_path('pickle'), 'wb') as f:
+            pickle.dump(data, f)
+        print(f"{datetime.now()} done.")
