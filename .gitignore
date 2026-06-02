@@ -217,8 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# OSM Data folder
+# OSM data folder and output folder
 osm_data/
+output/
 
 # MacOS
 .DS_Store
