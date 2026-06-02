@@ -20,6 +20,7 @@ class RoadHandler(osmium.SimpleHandler):
         super().__init__()
         self.rows = []
         self.node_ways = defaultdict(set)
+        self.way_nodes = defaultdict(set)
         self.routes = {}
         self.rel_parents = defaultdict(set)
         self.way_rels = defaultdict(set)
@@ -46,8 +47,8 @@ class RoadHandler(osmium.SimpleHandler):
             'road_name': w.tags.get('name'),
             'route_ref': w.tags.get('ref'),
             'junction': w.tags.get('junction'),
-            'nodes': way_nodes,
         })
+        self.way_nodes[w.id] = set(way_nodes)
         for way_node in way_nodes:
             self.node_ways[way_node].add(w.id)
 
@@ -93,43 +94,51 @@ class RoadHandler(osmium.SimpleHandler):
 
 def load_osm(osm_data_path):
     """Loads data from OSM PBF file."""
-    cache_path = _cache_path(osm_data_path)
+    cache_path = _cache_path(osm_data_path, 'pickle')
+    cache_path_ways = _cache_path(osm_data_path, 'geoparquet')
     checksum_path = _checksum_path(osm_data_path)
 
-    if checksum_path.is_file() and cache_path.is_file():
+    if (
+        checksum_path.is_file()
+        and cache_path.is_file()
+        and cache_path_ways.is_file()
+    ):
         with open(checksum_path, 'r', encoding='utf-8') as csf:
             osm_cache_checksum = json.load(csf)['checksum']
         if osm_cache_checksum == _checksum(osm_data_path):
             # Load cached data.
-            print("Loading OSM from cache...", end=" ", flush=True)
+            print(f"{datetime.now()} Loading pickle...")
             with open(cache_path, 'rb') as cf:
                 data = pickle.load(cf)
+            print(f"{datetime.now()} done.")
+            print(f"{datetime.now()} Loading ways from geoparquet...")
+            ways_gdf = gpd.read_parquet(cache_path_ways)
+            print(f"{datetime.now()} done.")
         else:
-            print(
-                "OSM PBF has changed since last cache. Processing...",
-                end=" ",
-                flush=True,
-            )
-            data = _process_osm(osm_data_path)
+            data, ways_gdf = _process_osm(osm_data_path)
     else:
-        print(
-            "No cache available. Processing OSM PBF...",
-            end=" ",
-            flush=True,
-        )
-        data = _process_osm(osm_data_path)
-    print("done.")
+        data, ways_gdf = _process_osm(osm_data_path)
     if len(data['routes']) == 0 or len(data['way_rels']) == 0:
         print(
             "No routes were found. Did you remember to include relations "
             "in your filter?"
         )
         sys.exit(1)
+    print(f"{datetime.now()} Creating ways dict...")
+    data['ways'] = ways_gdf \
+        .astype(object) \
+        .replace({np.nan: None}) \
+        .to_dict(orient='index')
+    print(f"{datetime.now()} done.")
 
     return data
 
-def _cache_path(osm_data_path):
-    return osm_data_path.with_suffix('.pickle')
+def _cache_path(osm_data_path, cache_type):
+    suffixes = {
+        'pickle': ".pickle",
+        'geoparquet': ".ways.parquet",
+    }
+    return osm_data_path.with_suffix(suffixes[cache_type])
 
 def _checksum(osm_data_path):
     h = hashlib.sha256()
@@ -141,8 +150,9 @@ def _checksum(osm_data_path):
 def _checksum_path(osm_data_path):
     return osm_data_path.with_suffix('.checksum.json')
 
-def _process_osm(osm_data_path) -> dict:
+def _process_osm(osm_data_path) -> tuple:
     """Processes the provided OSM PBF file."""
+    print(f"{datetime.now()} No cache available. Processing OSM PBF...")
     handler = RoadHandler()
     handler.apply_file(osm_data_path, locations=True)
     metadata = {
@@ -155,18 +165,20 @@ def _process_osm(osm_data_path) -> dict:
         # Store checksum of OSM PBF file.
         json.dump(metadata, f, indent=2)
     data = {
-        'ways': handler.ways_gdf \
-            .astype(object) \
-            .replace({np.nan: None}) \
-            .to_dict(orient='index'),
         'node_ways': handler.node_ways,
+        'way_nodes': handler.way_nodes,
         'routes': handler.routes,
         'rel_parents': handler.rel_parents,
         'way_rels': handler.way_rels,
         'ways_sindex': handler.ways_gdf.sindex, # Build spatial index
     }
     # Cache processed data.
-    cache_path = _cache_path(osm_data_path)
+    cache_path = _cache_path(osm_data_path, 'pickle')
+    print(f"{datetime.now()} Writing geoparquet...")
+    handler.ways_gdf.to_parquet(_cache_path(osm_data_path, 'geoparquet'))
+    print(f"{datetime.now()} done.")
+    print(f"{datetime.now()} Writing pickle...")
     with open(cache_path, 'wb') as f:
         pickle.dump(data, f)
-    return data
+    print(f"{datetime.now()} done.")
+    return (data, handler.ways_gdf)

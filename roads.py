@@ -3,6 +3,7 @@ import argparse
 import geopandas as gpd
 import numpy as np
 import tomllib
+from datetime import datetime
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
 from tqdm import tqdm
@@ -25,6 +26,7 @@ class RoadCounter():
         self.output_path: Path = output_path
         self.ways: dict | None = None
         self.ways_index: list | None = None
+        self.way_nodes: dict | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
@@ -120,7 +122,7 @@ class RoadCounter():
                 seg_road_geoms[current_way_id] = way['geometry']
                 self.visited_road_way_ids.add(current_way_id)
                 # Check ways sharing nodes with this way.
-                for node in way['nodes']:
+                for node in self.way_nodes[current_way_id]:
                     for adj_way_id in self.node_ways[node]:
                         stack.append(adj_way_id)
                 # Check for nearby ways with same name.
@@ -135,7 +137,7 @@ class RoadCounter():
             elif way['junction'] in ["circular", "roundabout"]:
                 # Follow roundabout without matching name, but don't
                 # store its ways.
-                for node in way['nodes']:
+                for node in self.way_nodes[adj_way_id]:
                     for adj_way_id in self.node_ways[node]:
                         stack.append(adj_way_id)
 
@@ -211,6 +213,7 @@ class RoadCounter():
         osm = load_osm(self.osm_pbf_path)
         self.ways = osm['ways']
         self.ways_index = list(osm['ways'].keys()) # Positional index
+        self.way_nodes = osm['way_nodes']
         self.node_ways = osm['node_ways']
         self.rels = osm['routes']
         self.rel_parents = osm['rel_parents']
@@ -219,7 +222,7 @@ class RoadCounter():
 
     def _load_tracks(self):
         """Loads GeoPackage driving track data."""
-        print("Loading tracks...", end=" ", flush=True)
+        print(f"{datetime.now()} Loading tracks...")
         tracks = gpd.read_file(
             self.tracks_path,
             layer='driving_tracks',
@@ -227,7 +230,7 @@ class RoadCounter():
             columns=['utc_start'],
         )
         tracks = tracks.sort_values('utc_start')
-        print("done.")
+        print(f"{datetime.now()} done.")
         self.tracks = tracks.to_crs(CONFIG['crs']['metric'])
 
     def _trace_road(self, way_id: int, track_fid: int):
