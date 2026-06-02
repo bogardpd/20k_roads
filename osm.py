@@ -111,7 +111,7 @@ class OSMDataContainer():
     def load_data(self):
         """Loads data from OSM PBF file."""
         cache_path = self._cache_path('pickle')
-        cache_path_ways = self._cache_path('geoparquet')
+        cache_path_ways = self._cache_path('feather')
         checksum_path = self._checksum_path()
 
         if (
@@ -124,7 +124,7 @@ class OSMDataContainer():
             if osm_cache_checksum == self._checksum():
                 # Load cached data.
                 self._read_cache_pickle()
-                self._read_cache_geoparquet()
+                self._read_cache_feather()
             else:
                 self._process_osm()
         else:
@@ -140,7 +140,7 @@ class OSMDataContainer():
     def _cache_path(self, cache_type):
         suffixes = {
             'pickle': ".pickle",
-            'geoparquet': ".ways.parquet",
+            'feather': ".ways.feather",
         }
         return self._osm_data_path.with_suffix(suffixes[cache_type])
 
@@ -185,13 +185,13 @@ class OSMDataContainer():
             sys.exit(1)
 
         # Cache processed data.
-        self._write_cache_geoparquet()
+        self._write_cache_feather()
         self._write_cache_pickle()
 
-    def _read_cache_geoparquet(self) -> None:
-        """Reads data from geoparquet file."""
-        print(f"{datetime.now()} Reading ways from geoparquet...")
-        self._ways_gdf = gpd.read_parquet(self._cache_path('geoparquet'))
+    def _read_cache_feather(self) -> None:
+        """Reads data from feather file."""
+        print(f"{datetime.now()} Reading ways from feather...")
+        self._ways_gdf = gpd.read_feather(self._cache_path('feather'))
         print(f"{datetime.now()} done.")
 
     def _read_cache_pickle(self) -> None:
@@ -207,10 +207,10 @@ class OSMDataContainer():
         self.ways_sindex = data['ways_sindex']
         print(f"{datetime.now()} done.")
 
-    def _write_cache_geoparquet(self) -> None:
-        """Stores data as geoparquet file."""
-        print(f"{datetime.now()} Writing geoparquet...")
-        self._ways_gdf.to_parquet(self._cache_path('geoparquet'))
+    def _write_cache_feather(self) -> None:
+        """Stores data as feather file."""
+        print(f"{datetime.now()} Writing feather...")
+        self._ways_gdf.to_feather(self._cache_path('feather'))
         print(f"{datetime.now()} done.")
 
     def _write_cache_pickle(self) -> None:
