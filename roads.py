@@ -218,6 +218,7 @@ class RoadCounter():
         self.rel_parents = osm.rel_parents
         self.way_rels = osm.way_rels
         self.ways_sindex = osm.ways_sindex
+        osm = None
 
     def _load_tracks(self):
         """Loads GeoPackage driving track data."""

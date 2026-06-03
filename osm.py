@@ -172,6 +172,7 @@ class OSMDataContainer():
         self.way_rels = handler.way_rels
         self.ways_sindex = handler.ways_gdf.sindex # Build spatial index
         self._ways_gdf = handler.ways_gdf
+        handler = None
 
         if not self.rels or not self.way_rels:
             print(
