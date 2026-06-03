@@ -21,7 +21,6 @@ class RoadHandler(osmium.SimpleHandler):
         super().__init__()
         self.rows = []
         self.node_ways = defaultdict(set)
-        self.way_nodes = defaultdict(set)
         self.rels = {}
         self.rel_parents = defaultdict(set)
         self.way_rels = defaultdict(set)
@@ -48,8 +47,8 @@ class RoadHandler(osmium.SimpleHandler):
             'road_name': w.tags.get('name'),
             'route_ref': w.tags.get('ref'),
             'junction': w.tags.get('junction'),
+            'nodes': way_nodes
         })
-        self.way_nodes[w.id] = set(way_nodes)
         for way_node in way_nodes:
             self.node_ways[way_node].add(w.id)
 
@@ -99,7 +98,6 @@ class OSMDataContainer():
     def __init__(self, osm_data_path):
         self.ways: dict | None = None
         self.ways_index: list | None = None
-        self.way_nodes: dict | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
@@ -169,7 +167,6 @@ class OSMDataContainer():
             json.dump(metadata, f, indent=2)
 
         self.node_ways = handler.node_ways
-        self.way_nodes = handler.way_nodes
         self.rels = handler.rels
         self.rel_parents = handler.rel_parents
         self.way_rels = handler.way_rels
@@ -198,7 +195,6 @@ class OSMDataContainer():
         with open(self._cache_path('pickle'), 'rb') as f:
             data = pickle.load(f)
         self.node_ways = data['node_ways']
-        self.way_nodes = data['way_nodes']
         self.rels = data['rels']
         self.rel_parents = data['rel_parents']
         self.way_rels = data['way_rels']
@@ -214,7 +210,6 @@ class OSMDataContainer():
         print(f"{datetime.now()} Writing pickle...")
         data = {
             'node_ways': self.node_ways,
-            'way_nodes': self.way_nodes,
             'rels': self.rels,
             'rel_parents': self.rel_parents,
             'way_rels': self.way_rels,

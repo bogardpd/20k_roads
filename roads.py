@@ -26,7 +26,6 @@ class RoadCounter():
         self.output_path: Path = output_path
         self.ways: dict | None = None
         self.ways_index: list | None = None
-        self.way_nodes: dict | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
@@ -122,7 +121,7 @@ class RoadCounter():
                 seg_road_geoms[current_way_id] = way['geometry']
                 self.visited_road_way_ids.add(current_way_id)
                 # Check ways sharing nodes with this way.
-                for node in self.way_nodes[current_way_id]:
+                for node in way['nodes']:
                     for adj_way_id in self.node_ways[node]:
                         stack.append(adj_way_id)
                 # Check for nearby ways with same name.
@@ -137,7 +136,7 @@ class RoadCounter():
             elif way['junction'] in ["circular", "roundabout"]:
                 # Follow roundabout without matching name, but don't
                 # store its ways.
-                for node in self.way_nodes[adj_way_id]:
+                for node in way['nodes']:
                     for adj_way_id in self.node_ways[node]:
                         stack.append(adj_way_id)
 
@@ -214,7 +213,6 @@ class RoadCounter():
         osm.load_data()
         self.ways = osm.ways
         self.ways_index = list(osm.ways.keys()) # Positional index
-        self.way_nodes = osm.way_nodes
         self.node_ways = osm.node_ways
         self.rels = osm.rels
         self.rel_parents = osm.rel_parents
