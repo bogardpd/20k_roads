@@ -43,8 +43,8 @@ class RoadCounter():
     def collect_roads(self):
         """Builds a collection of traveled roads."""
         print(
-            f"Loading OSM data from {self.osm_pbf_path}. This may take a "
-            "while."
+            f"{datetime.now()} Loading OSM data from {self.osm_pbf_path}. "
+            "This may take a while."
         )
         self._load_osm()
         self._load_tracks()
