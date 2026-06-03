@@ -22,7 +22,7 @@ class RoadHandler(osmium.SimpleHandler):
         self.rows = []
         self.node_ways = defaultdict(set)
         self.way_nodes = defaultdict(set)
-        self.routes = {}
+        self.rels = {}
         self.rel_parents = defaultdict(set)
         self.way_rels = defaultdict(set)
         self._factory = osmium.geom.WKBFactory()
@@ -71,7 +71,7 @@ class RoadHandler(osmium.SimpleHandler):
         child_relations = [m.ref for m in r.members if m.type == "r"]
         if len(ways) == 0 and len(child_relations) == 0:
             return
-        self.routes[r.id] = {
+        self.rels[r.id] = {
             'network': tags.get('network'),
             'ref': tags.get('ref'),
             'child_relations': child_relations,
@@ -171,7 +171,7 @@ class OSMDataContainer():
 
         self.node_ways = handler.node_ways
         self.way_nodes = handler.way_nodes
-        self.rels = handler.routes
+        self.rels = handler.rels
         self.rel_parents = handler.rel_parents
         self.way_rels = handler.way_rels
         self.ways_sindex = handler.ways_gdf.sindex # Build spatial index
@@ -179,8 +179,8 @@ class OSMDataContainer():
 
         if not self.rels or not self.way_rels:
             print(
-                "No routes were found. Did you remember to include relations "
-                "in your filter?"
+                "No route relations were found. Did you remember to include "
+                "relations in your filter?"
             )
             sys.exit(1)
 
