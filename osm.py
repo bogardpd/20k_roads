@@ -135,7 +135,6 @@ class OSMDataContainer():
             .astype(object) \
             .replace({np.nan: None}) \
             .to_dict(orient='index')
-        print(f"{datetime.now()} done.")
 
     def _cache_path(self, cache_type):
         suffixes = {
@@ -192,7 +191,6 @@ class OSMDataContainer():
         """Reads data from feather file."""
         print(f"{datetime.now()} Reading ways from feather...")
         self._ways_gdf = gpd.read_feather(self._cache_path('feather'))
-        print(f"{datetime.now()} done.")
 
     def _read_cache_pickle(self) -> None:
         """Reads data from pickle file."""
@@ -205,13 +203,11 @@ class OSMDataContainer():
         self.rel_parents = data['rel_parents']
         self.way_rels = data['way_rels']
         self.ways_sindex = data['ways_sindex']
-        print(f"{datetime.now()} done.")
 
     def _write_cache_feather(self) -> None:
         """Stores data as feather file."""
         print(f"{datetime.now()} Writing feather...")
         self._ways_gdf.to_feather(self._cache_path('feather'))
-        print(f"{datetime.now()} done.")
 
     def _write_cache_pickle(self) -> None:
         """Stores data as pickle file."""
@@ -226,4 +222,3 @@ class OSMDataContainer():
         }
         with open(self._cache_path('pickle'), 'wb') as f:
             pickle.dump(data, f)
-        print(f"{datetime.now()} done.")

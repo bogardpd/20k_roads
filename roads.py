@@ -231,7 +231,6 @@ class RoadCounter():
             columns=['utc_start'],
         )
         tracks = tracks.sort_values('utc_start')
-        print(f"{datetime.now()} done.")
         self.tracks = tracks.to_crs(CONFIG['crs']['metric'])
 
     def _trace_road(self, way_id: int, track_fid: int):
