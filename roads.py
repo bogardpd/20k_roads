@@ -25,6 +25,7 @@ class RoadCounter():
         self.tracks_path: Path = tracks_path
         self.output_path: Path = output_path
         self.ways: dict | None = None
+        self.ways_gdf: gpd.GeoDataFrame | None = None
         self.ways_index: list | None = None
         self.node_ways: dict | None = None
         self.rels: dict | None = None
@@ -212,13 +213,15 @@ class RoadCounter():
         osm = OSMDataContainer(self.osm_pbf_path)
         osm.load_data()
         self.ways = osm.ways
+        self.ways_gdf = osm.ways_gdf
         self.ways_index = list(osm.ways.keys()) # Positional index
         self.node_ways = osm.node_ways
         self.rels = osm.rels
         self.rel_parents = osm.rel_parents
         self.way_rels = osm.way_rels
-        self.ways_sindex = osm.ways_sindex
         osm = None
+        print(f"{datetime.now()} Building spatial index...")
+        self.ways_sindex = self.ways_gdf.sindex
 
     def _load_tracks(self):
         """Loads GeoPackage driving track data."""

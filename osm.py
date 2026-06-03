@@ -102,9 +102,8 @@ class OSMDataContainer():
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
         self.way_rels: dict | None = None
-        self.ways_sindex: gpd.sindex.SpatialIndex | None = None
+        self.ways_gdf: gpd.GeoDataFrame | None = None
         self._osm_data_path: Path = osm_data_path
-        self._ways_gdf: gpd.GeoDataFrame | None = None
 
     def load_data(self):
         """Loads data from OSM PBF file."""
@@ -129,7 +128,7 @@ class OSMDataContainer():
             self._process_osm()
 
         print(f"{datetime.now()} Creating ways dict...")
-        self.ways = self._ways_gdf \
+        self.ways = self.ways_gdf \
             .astype(object) \
             .replace({np.nan: None}) \
             .to_dict(orient='index')
@@ -170,8 +169,7 @@ class OSMDataContainer():
         self.rels = handler.rels
         self.rel_parents = handler.rel_parents
         self.way_rels = handler.way_rels
-        self.ways_sindex = handler.ways_gdf.sindex # Build spatial index
-        self._ways_gdf = handler.ways_gdf
+        self.ways_gdf = handler.ways_gdf
         handler = None
 
         if not self.rels or not self.way_rels:
@@ -188,7 +186,7 @@ class OSMDataContainer():
     def _read_cache_feather(self) -> None:
         """Reads data from feather file."""
         print(f"{datetime.now()} Reading ways from feather...")
-        self._ways_gdf = gpd.read_feather(self._cache_path('feather'))
+        self.ways_gdf = gpd.read_feather(self._cache_path('feather'))
 
     def _read_cache_pickle(self) -> None:
         """Reads data from pickle file."""
@@ -199,12 +197,11 @@ class OSMDataContainer():
         self.rels = data['rels']
         self.rel_parents = data['rel_parents']
         self.way_rels = data['way_rels']
-        self.ways_sindex = data['ways_sindex']
 
     def _write_cache_feather(self) -> None:
         """Stores data as feather file."""
         print(f"{datetime.now()} Writing feather...")
-        self._ways_gdf.to_feather(self._cache_path('feather'))
+        self.ways_gdf.to_feather(self._cache_path('feather'))
 
     def _write_cache_pickle(self) -> None:
         """Stores data as pickle file."""
@@ -214,7 +211,6 @@ class OSMDataContainer():
             'rels': self.rels,
             'rel_parents': self.rel_parents,
             'way_rels': self.way_rels,
-            'ways_sindex': self._ways_gdf.sindex,
         }
         with open(self._cache_path('pickle'), 'wb') as f:
             pickle.dump(data, f)
