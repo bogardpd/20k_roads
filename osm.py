@@ -121,10 +121,12 @@ class OSMDataContainer():
             f"{len(self.rels)} OSM relations."
         )
         print(f"{datetime.now()} Creating ways dict...")
-        self.ways = self.ways_gdf \
-            .astype(object) \
-            .replace({np.nan: None}) \
-            .to_dict(orient='index')
+        cols = self.ways_gdf.columns.to_list()
+        data = self.ways_gdf.to_numpy(dtype=object, na_value=None)
+        self.ways = {
+            idx: dict(zip(cols, row))
+            for idx, row in zip(self.ways_gdf.index, data)
+        }
 
     def _cache_path(self, cache_type):
         suffixes = {
