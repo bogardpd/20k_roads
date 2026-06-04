@@ -58,12 +58,11 @@ class RoadCounter():
                 for segment in track.geometry.geoms:
                     for seg_way_id in self._get_segment_ways(segment):
                         self._trace_road(seg_way_id, track_fid)
-                    # self._collect_segment(segment, track_fid)
                 prog_bar.set_postfix(roads=self.visited_road_count)
 
     def export_roads(self):
         """Saves road data to a file."""
-        if len(self.visited_road_records) == 0:
+        if not self.visited_road_records:
             print("No roads found.")
             return
         visited_road_gdf = gpd.GeoDataFrame(
