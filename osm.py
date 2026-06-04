@@ -2,7 +2,6 @@
 import geopandas as gpd
 import hashlib
 import json
-import numpy as np
 import osmium
 import pickle
 import sys
