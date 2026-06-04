@@ -3,6 +3,7 @@ import argparse
 import geopandas as gpd
 import numpy as np
 import tomllib
+import colorama
 from datetime import datetime
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
@@ -12,6 +13,7 @@ from osm import OSMDataContainer
 
 with open('config.toml', 'rb') as config_file:
     CONFIG = tomllib.load(config_file)
+colorama.init()
 
 class RoadCounter():
     """Counts roads that have been traveled on."""
@@ -338,4 +340,8 @@ if __name__ == "__main__":
 
     rc = RoadCounter(args.osm, args.tracks, args.output)
     rc.collect_roads()
+    print(
+        f"{datetime.now()} Found {colorama.Fore.GREEN}{colorama.Style.BRIGHT}"
+        f"{len(rc.visited_road_records)} roads{colorama.Style.RESET_ALL}."
+    )
     rc.export_roads()
