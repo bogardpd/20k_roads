@@ -45,7 +45,7 @@ class RoadCounter():
         """Builds a collection of traveled roads."""
         self._load_osm()
         self._load_tracks()
-        print("Matching tracks to roads...")
+        print("Processing driving tracks...")
         with tqdm(
             self.tracks.iterrows(),
             total=len(self.tracks),
