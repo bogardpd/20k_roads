@@ -20,7 +20,6 @@ class RoadHandler(osmium.SimpleHandler):
     def __init__(self):
         super().__init__()
         self.rows = []
-        self.node_ways = defaultdict(set)
         self.rels = {}
         self.rel_parents = defaultdict(set)
         self.way_rels = defaultdict(set)
@@ -34,12 +33,6 @@ class RoadHandler(osmium.SimpleHandler):
             geom = wkb_loads(self._factory.create_linestring(w), hex=True)
         except osmium.InvalidLocationError:
             return
-        if w.tags.get('junction') in ["circular", "roundabout"]:
-            # Get all nodes for roundabouts.
-            way_nodes = [n.ref for n in w.nodes]
-        else:
-            # Get only first and last nodes for other ways.
-            way_nodes = [w.nodes[0].ref, w.nodes[-1].ref]
         self.rows.append({
             'geometry': geom,
             'id': w.id,
@@ -47,10 +40,7 @@ class RoadHandler(osmium.SimpleHandler):
             'road_name': w.tags.get('name'),
             'route_ref': w.tags.get('ref'),
             'junction': w.tags.get('junction'),
-            'nodes': way_nodes
         })
-        for way_node in way_nodes:
-            self.node_ways[way_node].add(w.id)
 
     def relation(self, r):
         """Processing for each relation in OSM data."""
@@ -98,7 +88,6 @@ class OSMDataContainer():
     def __init__(self, osm_data_path):
         self.ways: dict | None = None
         self.ways_index: list | None = None
-        self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
         self.way_rels: dict | None = None
@@ -127,6 +116,10 @@ class OSMDataContainer():
         else:
             self._process_osm()
 
+        print(
+            f"{datetime.now()} Loaded {len(self.ways_gdf.index)} OSM ways, "
+            f"{len(self.rels)} OSM relations."
+        )
         print(f"{datetime.now()} Creating ways dict...")
         self.ways = self.ways_gdf \
             .astype(object) \
@@ -165,7 +158,6 @@ class OSMDataContainer():
             # Store checksum of OSM PBF file.
             json.dump(metadata, f, indent=2)
 
-        self.node_ways = handler.node_ways
         self.rels = handler.rels
         self.rel_parents = handler.rel_parents
         self.way_rels = handler.way_rels
@@ -193,7 +185,6 @@ class OSMDataContainer():
         print(f"{datetime.now()} Reading pickle...")
         with open(self._cache_path('pickle'), 'rb') as f:
             data = pickle.load(f)
-        self.node_ways = data['node_ways']
         self.rels = data['rels']
         self.rel_parents = data['rel_parents']
         self.way_rels = data['way_rels']
@@ -207,7 +198,6 @@ class OSMDataContainer():
         """Stores data as pickle file."""
         print(f"{datetime.now()} Writing pickle...")
         data = {
-            'node_ways': self.node_ways,
             'rels': self.rels,
             'rel_parents': self.rel_parents,
             'way_rels': self.way_rels,

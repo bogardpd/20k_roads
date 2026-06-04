@@ -27,7 +27,6 @@ class RoadCounter():
         self.ways: dict | None = None
         self.ways_gdf: gpd.GeoDataFrame | None = None
         self.ways_index: list | None = None
-        self.node_ways: dict | None = None
         self.rels: dict | None = None
         self.rel_parents: dict | None = None
         self.way_rels: dict | None = None
@@ -120,10 +119,6 @@ class RoadCounter():
                 # Road name matches, so store its way.
                 seg_road_geoms[current_way_id] = way['geometry']
                 self.visited_road_way_ids.add(current_way_id)
-                # Check ways sharing nodes with this way.
-                for node in way['nodes']:
-                    for adj_way_id in self.node_ways[node]:
-                        stack.append(adj_way_id)
                 # Check for nearby ways with same name.
                 nearby_idx = self.ways_sindex.query(
                     way['geometry'],
@@ -133,12 +128,6 @@ class RoadCounter():
                 )
                 nearby = [self.ways_index[n] for n in nearby_idx]
                 stack.extend(nearby)
-            elif way['junction'] in ["circular", "roundabout"]:
-                # Follow roundabout without matching name, but don't
-                # store its ways.
-                for node in way['nodes']:
-                    for adj_way_id in self.node_ways[node]:
-                        stack.append(adj_way_id)
 
     def _get_segment_ways(self, segment: LineString) -> list[int]:
         """Gets a list of way IDs the segment traverses."""
@@ -214,7 +203,6 @@ class RoadCounter():
         self.ways = osm.ways
         self.ways_gdf = osm.ways_gdf
         self.ways_index = list(osm.ways.keys()) # Positional index
-        self.node_ways = osm.node_ways
         self.rels = osm.rels
         self.rel_parents = osm.rel_parents
         self.way_rels = osm.way_rels
