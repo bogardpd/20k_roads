@@ -43,13 +43,9 @@ class RoadCounter():
 
     def collect_roads(self):
         """Builds a collection of traveled roads."""
-        print(
-            f"{datetime.now()} Loading OSM data from {self.osm_pbf_path}. "
-            "This may take a while."
-        )
         self._load_osm()
         self._load_tracks()
-        print(f"{datetime.now()} Processing tracks...")
+        print("Matching tracks to roads...")
         with tqdm(
             self.tracks.iterrows(),
             total=len(self.tracks),
@@ -73,7 +69,7 @@ class RoadCounter():
         ).to_crs(CONFIG['crs']['output'])
         gpkg_path = self.output_path
         visited_road_gdf.to_file(gpkg_path, layer='roads', driver='GPKG')
-        print(f"{datetime.now()} Exported GeoPackage to {gpkg_path}.")
+        print(f"Exported GeoPackage to {gpkg_path}.")
 
 
     def _add_route(self, rel_id: int, track_fid: int):
@@ -209,12 +205,12 @@ class RoadCounter():
         self.rel_parents = osm.rel_parents
         self.way_rels = osm.way_rels
         osm = None
-        print(f"{datetime.now()} Building spatial index...")
+        print("Building spatial index...")
         self.ways_sindex = self.ways_gdf.sindex
 
     def _load_tracks(self):
         """Loads GeoPackage driving track data."""
-        print(f"{datetime.now()} Loading tracks...")
+        print("Loading driving tracks...")
         tracks = gpd.read_file(
             self.tracks_path,
             layer='driving_tracks',
@@ -341,7 +337,7 @@ if __name__ == "__main__":
     rc = RoadCounter(args.osm, args.tracks, args.output)
     rc.collect_roads()
     print(
-        f"{datetime.now()} Found {colorama.Fore.GREEN}{colorama.Style.BRIGHT}"
+        f"Found {colorama.Fore.GREEN}{colorama.Style.BRIGHT}"
         f"{len(rc.visited_road_records)} roads{colorama.Style.RESET_ALL}."
     )
     rc.export_roads()
