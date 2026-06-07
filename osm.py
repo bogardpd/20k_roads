@@ -1,13 +1,10 @@
 """OSM processing helper functions."""
 import geopandas as gpd
-import hashlib
-import json
 import osmium
 import pickle
 import sys
 import tomllib
 from collections import defaultdict
-from datetime import datetime, timezone
 from pathlib import Path
 from shapely.wkb import loads as wkb_loads
 
@@ -97,25 +94,15 @@ class OSMDataContainer():
         """Loads data from OSM PBF file."""
         cache_path = self._cache_path('pickle')
         cache_path_ways = self._cache_path('feather')
-        checksum_path = self._checksum_path()
 
-        if (
-            checksum_path.is_file()
-            and cache_path.is_file()
-            and cache_path_ways.is_file()
-        ):
-            with open(checksum_path, 'r', encoding='utf-8') as csf:
-                osm_cache_checksum = json.load(csf)['checksum']
-            if osm_cache_checksum == self._checksum():
-                # Load cached data.
-                print(f"Cache available for {self._osm_data_path}.")
-                print("Loading OSM data from cache...")
-                self._read_cache_pickle()
-                self._read_cache_feather()
-            else:
-                self._process_osm()
+        if (cache_path.is_file() and cache_path_ways.is_file()):
+            print(
+                f"Loading preprocessed OSM data for {self._osm_data_path}..."
+            )
+            self._read_cache_pickle()
+            self._read_cache_feather()
         else:
-            self._process_osm()
+            self._preprocess_osm()
 
         print(
             f"Loaded {len(self.ways_gdf.index)} OSM ways, "
@@ -135,31 +122,12 @@ class OSMDataContainer():
         }
         return self._osm_data_path.with_suffix(suffixes[cache_type])
 
-    def _checksum(self):
-        h = hashlib.sha256()
-        with open(self._osm_data_path, 'rb') as f:
-            while chunk := f.read(1 << 20):
-                h.update(chunk)
-        return h.hexdigest()
-
-    def _checksum_path(self):
-        return self._osm_data_path.with_suffix('.checksum.json')
-
-    def _process_osm(self) -> None:
+    def _preprocess_osm(self) -> None:
         """Processes the provided OSM PBF file."""
-        print(f"No cache available for {self._osm_data_path}.")
+        print(f"No preprocessed data available for {self._osm_data_path}.")
         print("Processing OSM PBF (this may take a while)...")
         handler = RoadHandler()
         handler.apply_file(self._osm_data_path, locations=True)
-        metadata = {
-            'source': str(self._osm_data_path),
-            'checksum': self._checksum(),
-            'processed_at': datetime.now(timezone.utc).isoformat(),
-        }
-        checksum_path = self._checksum_path()
-        with open(checksum_path, 'w', encoding='utf-8') as f:
-            # Store checksum of OSM PBF file.
-            json.dump(metadata, f, indent=2)
 
         self.rels = handler.rels
         self.rel_parents = handler.rel_parents
@@ -174,8 +142,8 @@ class OSMDataContainer():
             )
             sys.exit(1)
 
-        # Cache processed data.
-        print("Writing OSM data to cache...")
+        # Write preprocessed data.
+        print("Saving preprocessed OSM data...")
         self._write_cache_feather()
         self._write_cache_pickle()
 

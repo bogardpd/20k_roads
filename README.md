@@ -16,6 +16,12 @@ Arguments:
 - **`--tracks`:** A GeoPackage file that contains a `driving_tracks` MultiLineString layer with a `utc_start` datetime column.
 - **`--output-dir`:** A directory to store the outputs from this script.
 
+> [!IMPORTANT]
+>
+> Preprocessing the OSM PBF data into a format that Python can use takes a long time for large regions. Because of this, the script will store preprocessed OSM data in cache files based on the `--osm` file with the final `.pbf` extension changed to `.ways.feather` (for way geometry data) and `.pickle` (for other data). (For example, processing `roads.osm.pbf` would create `roads.osm.ways.feather` and `roads.osm.pickle` in the same directory).
+>
+> If these files are both present, then the script will use them instead of the original `.pbf` data. If you update the data in the original `.pbf` file, be sure to delete its corresponding `.ways.feather` and `.pickle` files to force the script to use your updated data.
+
 ### Chart Cumulative Roads
 
 Creates a simple chart of cumulative roads visited over time.
