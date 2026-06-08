@@ -5,6 +5,7 @@ import numpy as np
 import tomllib
 import colorama
 from datetime import datetime
+from itertools import groupby
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
 from tqdm import tqdm
@@ -97,6 +98,11 @@ class RoadCounter():
         }
         self.visited_road_records.append(record)
         return route_id
+    
+    def _all_equal(self, iterable):
+        """Returns true if all elements are equal."""
+        g = groupby(iterable)
+        return next(g, True) and not next(g, False)
 
     def _get_named_road_way_ids(
         self,
@@ -144,24 +150,35 @@ class RoadCounter():
         if not closest_way_ids:
             return []
 
-        # Find streaks of consecutive points having same closest OSM
-        # way.
+        closest_ways = [{
+            'id': wid,
+            'road_name': self.ways[wid]['road_name'],
+            'way_rels': self.way_rels[wid]
+        } for wid in closest_way_ids]
+
+        # Find rolling windows where a certain number of points in a row
+        # have the same way ID, have the same name, or share at least
+        # one relation.
         streaks = []
-        checked_ways = set()
-        i = 0
-        while i < len(closest_way_ids):
-            way_id = closest_way_ids[i]
-            j = i
-            while j < len(closest_way_ids) and closest_way_ids[j] == way_id:
-                j += 1
-            streak_length = j - i
-            if (
-                streak_length >= CONFIG['search']['consec_pts']
-                and way_id not in checked_ways
-            ):
-                streaks.append(way_id)
-                checked_ways.add(way_id)
-            i = j
+        for i in range(len(closest_ways)- CONFIG['search']['consec_pts'] + 1):
+            current_id = closest_ways[i]['id']
+            if closest_ways[i]['id'] in streaks:
+                continue
+            window = closest_ways[i:i+CONFIG['search']['consec_pts']]
+            if self._all_equal([w['id'] for w in window]):
+                # All window points share same way ID.
+                streaks.append(current_id)
+                continue
+            if self._all_equal([w['road_name'] for w in window]):
+                # All window points share same name.
+                streaks.append(current_id)
+                continue
+            if set.intersection(*[w['way_rels'] for w in window]):
+                # All window points share at least one relation.
+                # This assumes way_rels have already been filtered for
+                # valid networks in RoadHandler in osm.py.
+                streaks.append(current_id)
+                continue
         return streaks
 
     def _get_route_way_ids(self, rel_id: int, route_id: int) -> set:
