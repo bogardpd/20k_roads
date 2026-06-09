@@ -4,7 +4,6 @@ import geopandas as gpd
 import numpy as np
 import tomllib
 import colorama
-from datetime import datetime
 from itertools import groupby
 from pathlib import Path
 from shapely.geometry import Point, LineString, MultiLineString
