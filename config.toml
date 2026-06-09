@@ -35,7 +35,7 @@ networks = [
     "US:CT",
     "US:DC",
     "US:DE",
-    "US:FL", "US:FL:Toll", "US:FL:Turnpike",
+    "US:FL", "US:FL:CR", "US:FL:Toll", "US:FL:Turnpike",
     "US:GA",
     "US:HI",
     "US:IA",
