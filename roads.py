@@ -98,7 +98,7 @@ class RoadCounter():
         }
         self.visited_road_records.append(record)
         return route_id
-    
+
     def _all_equal(self, iterable):
         """Returns true if all elements are equal."""
         g = groupby(iterable)
@@ -136,6 +136,9 @@ class RoadCounter():
     def _get_segment_ways(self, segment: LineString) -> list[int]:
         """Gets a list of way IDs the segment traverses."""
         coords = np.array(segment.coords)
+        if len(coords) < CONFIG['search']['consec_pts']:
+            # The segment is not long enough to match any ways.
+            return []
 
         # Get the closest way for every point.
         input_idx, result_idx = self.ways_sindex.nearest(
@@ -160,7 +163,7 @@ class RoadCounter():
         # have the same way ID, have the same name, or share at least
         # one relation.
         streaks = []
-        for i in range(len(closest_ways)- CONFIG['search']['consec_pts'] + 1):
+        for i in range(len(closest_ways) - CONFIG['search']['consec_pts'] + 1):
             current_id = closest_ways[i]['id']
             if closest_ways[i]['id'] in streaks:
                 continue
