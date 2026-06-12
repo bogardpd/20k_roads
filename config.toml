@@ -108,5 +108,6 @@ highway_types = [
     'trunk_link',
     'primary_link',
     'secondary_link',
+    'living_street',
 ]
 distinctness_ratio = 0.05 # Fraction of ways of a named road that must be distinct from an overlapping route to keep the road

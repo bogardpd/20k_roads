@@ -51,6 +51,7 @@ osmium tags-filter region-latest.osm.pbf \
   w/highway=trunk_link \
   w/highway=primary_link \
   w/highway=secondary_link \
+  w/highway=living_street \
   r/type=route,route=road \
   r/type=superroute,route=road \
   -o region-roads-drivable.osm.pbf
