@@ -59,6 +59,7 @@ class RoadHandler(osmium.SimpleHandler):
         self.rels[r.id] = {
             'network': tags.get('network'),
             'ref': tags.get('ref'),
+            'name': tags.get('name'),
             'child_relations': child_relations,
             'ways': ways,
         }

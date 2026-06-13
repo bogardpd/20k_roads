@@ -299,6 +299,8 @@ def format_numbered_route(route: dict) -> str:
     """Formats a numbered route identifier."""
     network = route['network'].split(":")
     ref = route['ref']
+    if ref is None and route['name'] is not None:
+        return route['name']
     if network[0] == "US":
         name = "-".join(
             [n for n in [network[1], ref] if n is not None]
