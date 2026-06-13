@@ -85,6 +85,7 @@ networks = [
 networks_unsigned = [
     # Networks to allow even if unsigned (no 'ref'). Network must still be in networks list above.
     "US:FL:Turnpike",
+    "US:KY:Parkway",
 ]
 
 [crs]
